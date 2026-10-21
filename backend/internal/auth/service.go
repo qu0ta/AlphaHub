@@ -37,7 +37,7 @@ type Service struct {
 func toUserResponse(user User) *UserResponse {
 	return &UserResponse{
 		ID:        user.ID,
-		Name:      user.Name,
+		FullName:  user.FullName,
 		Email:     user.Email,
 		Role:      user.Role,
 		CompanyID: user.CompanyID,
@@ -58,7 +58,7 @@ func NewService(repo UserRepository, jwtSecret string) (*Service, error) {
 	}, nil
 }
 func (s *Service) Register(ctx context.Context, req RegisterRequest) (*UserResponse, error) {
-	name := strings.TrimSpace(req.Name)
+	name := strings.TrimSpace(req.FullName)
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
 	if name == "" {
@@ -81,7 +81,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*UserRespo
 
 	user := User{
 		ID:           uuid.NewString(),
-		Name:         name,
+		FullName:     name,
 		Email:        email,
 		PasswordHash: string(hash),
 		Role:         "CLIENT",

@@ -2,7 +2,7 @@ package auth
 
 type User struct {
 	ID           string `json:"id"`
-	Name         string `json:"name"`
+	FullName     string `json:"fullName"`
 	Email        string `json:"email"`
 	PasswordHash string `json:"-"`
 	Role         string `json:"role"`
@@ -10,7 +10,7 @@ type User struct {
 }
 
 type RegisterRequest struct {
-	Name     string `json:"name"`
+	FullName string `json:"fullName"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -22,7 +22,7 @@ type LoginRequest struct {
 
 type UserResponse struct {
 	ID        string `json:"id"`
-	Name      string `json:"name"`
+	FullName  string `json:"fullName"`
 	Email     string `json:"email"`
 	Role      string `json:"role"`
 	CompanyID string `json:"company_id,omitempty"`
