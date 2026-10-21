@@ -1,0 +1,5 @@
+BEGIN;
+
+DROP TABLE documents;
+
+COMMIT;
