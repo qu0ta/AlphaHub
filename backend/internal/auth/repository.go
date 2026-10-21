@@ -13,11 +13,11 @@ type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-func (p *PostgresRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
+func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	const query = `
 		SELECT
 			id::text,
-			name,
+			fullname,
 			email,
 			password_hash,
 			role,
@@ -26,14 +26,7 @@ func (p *PostgresRepository) FindByEmail(ctx context.Context, email string) (*Us
 		WHERE LOWER(email) = LOWER($1)
 	`
 	var user User
-	err := p.pool.QueryRow(ctx, query, email).Scan(
-		&user.ID,
-		&user.FullName,
-		&user.Email,
-		&user.PasswordHash,
-		&user.Role,
-		&user.CompanyID,
-	)
+	err := scanUser(ctx, email, r, query, user)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -42,11 +35,22 @@ func (p *PostgresRepository) FindByEmail(ctx context.Context, email string) (*Us
 	}
 	return &user, nil
 }
-func (p *PostgresRepository) FindByID(ctx context.Context, id string) (*User, error) {
+
+func scanUser(ctx context.Context, email string, r *PostgresRepository, query string, user User) error {
+	return r.pool.QueryRow(ctx, query, email).Scan(
+		&user.ID,
+		&user.FullName,
+		&user.Email,
+		&user.PasswordHash,
+		&user.Role,
+		&user.CompanyID,
+	)
+}
+func (r *PostgresRepository) FindByID(ctx context.Context, id string) (*User, error) {
 	const query = `
 		SELECT
 			id::text,
-			name,
+			fullname,
 			email,
 			password_hash,
 			role,
@@ -57,7 +61,7 @@ func (p *PostgresRepository) FindByID(ctx context.Context, id string) (*User, er
 
 	var user User
 
-	err := p.pool.QueryRow(ctx, query, id).Scan(
+	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&user.ID,
 		&user.FullName,
 		&user.Email,
@@ -67,7 +71,7 @@ func (p *PostgresRepository) FindByID(ctx context.Context, id string) (*User, er
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, ErrUserNotFound
 	}
 
 	if err != nil {
@@ -76,11 +80,11 @@ func (p *PostgresRepository) FindByID(ctx context.Context, id string) (*User, er
 
 	return &user, nil
 }
-func (p *PostgresRepository) Create(ctx context.Context, user User) error {
+func (r *PostgresRepository) Create(ctx context.Context, user User) error {
 	const query = `
 		INSERT INTO users (
 			id,
-			name,
+			fullname,
 			email,
 			password_hash,
 			role,
@@ -92,7 +96,7 @@ func (p *PostgresRepository) Create(ctx context.Context, user User) error {
 		)
 	`
 
-	_, err := p.pool.Exec(
+	_, err := r.pool.Exec(
 		ctx,
 		query,
 		user.ID,

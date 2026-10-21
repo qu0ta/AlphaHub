@@ -10,6 +10,7 @@ CREATE TABLE products
     min_term_months      INTEGER      NOT NULL,
     max_term_months      INTEGER      NOT NULL,
     base_annual_rate_bps INTEGER      NOT NULL,
+    is_active            BOOLEAN      NOT NULL,
     CONSTRAINT products_code_check CHECK (btrim(code) <> ''),
     CONSTRAINT products_name_check CHECK (btrim(name) <> ''),
     CONSTRAINT products_amount_check CHECK (
