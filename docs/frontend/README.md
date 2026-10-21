@@ -25,5 +25,5 @@ API заявок, компаний, документов, предложений
 загрузки файлов, WebSocket и SSE. Функция Health есть, но /health не подключён к маршрутизатору.
 
 Источники истины: backend/cmd/main.go; backend/internal/auth/{handler,model,service,repository}.go;
-backend/internal/platform/db/postgres.go; backend/migrations/001_create_users.sql; compose.yaml.
+backend/internal/platform/db/postgres.go; backend/migrations/README.md; compose.yaml.
 Рекомендации для UI не означают, что такой frontend уже написан.

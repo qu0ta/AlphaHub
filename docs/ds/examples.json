@@ -1,0 +1,112 @@
+{
+  "FinancialExtractionResponse": {
+    "inn": "7707083893",
+    "financials": [
+      {
+        "period_month": "2026-04",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-05",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-06",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-07",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-08",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-09",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      }
+    ],
+    "declared_monthly_debt_payment_kopecks": 2000000
+  },
+  "ScoringInput": {
+    "inn": "7707083893",
+    "financials": [
+      {
+        "period_month": "2026-04",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-05",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-06",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-07",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-08",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      },
+      {
+        "period_month": "2026-09",
+        "revenue_kopecks": 15000000,
+        "operating_inflow_kopecks": 14000000,
+        "operating_outflow_kopecks": 9000000,
+        "tax_outflow_kopecks": 1000000
+      }
+    ],
+    "declared_monthly_debt_payment_kopecks": 2000000,
+    "amount_kopecks": 50000000,
+    "term_months": 12
+  },
+  "ScoringResponse": {
+    "score": 65,
+    "explanation": {
+      "positive_factors": [
+        "Стабильная выручка"
+      ],
+      "negative_factors": [
+        "Высокая долговая нагрузка"
+      ]
+    },
+    "model_version": "rules-v1"
+  }
+}
