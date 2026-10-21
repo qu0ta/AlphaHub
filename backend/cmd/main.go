@@ -9,6 +9,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/qu0ta/AlphaHub/internal/auth"
+	"github.com/qu0ta/AlphaHub/internal/dsclient"
 	"github.com/qu0ta/AlphaHub/internal/platform/db"
 	"github.com/qu0ta/AlphaHub/internal/product"
 )
@@ -29,6 +30,12 @@ func main() {
 	}
 	defer pool.Close()
 	log.Println("PostgreSQL connected")
+
+	dsClient, err := dsclient.NewClient(os.Getenv("DS_BASE_URL"))
+	if err != nil {
+		log.Fatalf("Init DS client: %v", err)
+	}
+	_ = dsClient
 
 	mux := http.NewServeMux()
 
