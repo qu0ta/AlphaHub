@@ -28,7 +28,7 @@ func (p *PostgresRepository) FindByEmail(ctx context.Context, email string) (*Us
 	var user User
 	err := p.pool.QueryRow(ctx, query, email).Scan(
 		&user.ID,
-		&user.Name,
+		&user.FullName,
 		&user.Email,
 		&user.PasswordHash,
 		&user.Role,
@@ -59,7 +59,7 @@ func (p *PostgresRepository) FindByID(ctx context.Context, id string) (*User, er
 
 	err := p.pool.QueryRow(ctx, query, id).Scan(
 		&user.ID,
-		&user.Name,
+		&user.FullName,
 		&user.Email,
 		&user.PasswordHash,
 		&user.Role,
@@ -96,7 +96,7 @@ func (p *PostgresRepository) Create(ctx context.Context, user User) error {
 		ctx,
 		query,
 		user.ID,
-		user.Name,
+		user.FullName,
 		user.Email,
 		user.PasswordHash,
 		user.Role,

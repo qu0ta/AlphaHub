@@ -32,3 +32,8 @@ type LoginResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 }
+
+type AuthUser struct {
+	ID   string
+	Role string
+}

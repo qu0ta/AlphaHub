@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -41,6 +42,41 @@ func main() {
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("GET /api/v1/auth/me", authHandler.Me)
+
+	mux.Handle(
+		"GET /api/v1/client/test",
+		authHandler.RequireAuth(
+			auth.RequireRole("CLIENT")(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					user, _ := auth.UserFromContext(r.Context())
+
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"message": "Client access granted",
+						"user_id": user.ID,
+						"role":    user.Role,
+					})
+				}),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/bank/test",
+		authHandler.RequireAuth(
+			auth.RequireRole("BANK_EMPLOYEE")(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					user, _ := auth.UserFromContext(r.Context())
+
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"message": "Bank employee access granted",
+						"user_id": user.ID,
+						"role":    user.Role,
+					})
+				}),
+			),
+		),
+	)
 
 	port := os.Getenv("HTTP_PORT")
 	if port == "" {
