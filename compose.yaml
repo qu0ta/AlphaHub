@@ -18,5 +18,21 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    image: migrate/migrate:v4.20.1
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    entrypoint:
+      - migrate
+      - -path
+      - /migrations
+      - -database
+      - postgres://alphahub:alphahub_dev_local@postgres:5432/alphahub?sslmode=disable
+    command: ["up"]
+
 volumes:
   postgres_data:
