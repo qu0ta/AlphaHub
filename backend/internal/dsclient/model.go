@@ -24,6 +24,8 @@ type ScoringInput struct {
 	TermMonths                        int                 `json:"term_months"`
 	Financials                        []MonthlyFinancials `json:"financials"`
 	DeclaredMonthlyDebtPaymentKopecks int64               `json:"declared_monthly_debt_payment_kopecks"`
+	AnnualRateBps                     int                 `json:"annual_rate_bps"`
+	ApplicationDate                   string              `json:"application_date"`
 }
 
 type ScoringExplanation struct {

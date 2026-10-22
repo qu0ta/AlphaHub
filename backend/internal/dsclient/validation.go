@@ -45,7 +45,46 @@ func (input ScoringInput) Validate() error {
 	if input.AmountKopecks <= 0 || input.TermMonths <= 0 {
 		return fmt.Errorf("amount_kopecks and term_months must be positive")
 	}
-	return validateFinancials(input.INN, input.Financials, input.DeclaredMonthlyDebtPaymentKopecks)
+
+	if input.AnnualRateBps < 0 {
+		return fmt.Errorf("annual_rate_bps must be nonnegative")
+	}
+
+	date, err := time.Parse("2006-01-02", input.ApplicationDate)
+	if err != nil ||
+		date.Year() < 1 ||
+		date.Format("2006-01-02") != input.ApplicationDate {
+		return fmt.Errorf("application_date must be YYYY-MM-DD")
+	}
+
+	if err := validateFinancials(
+		input.INN,
+		input.Financials,
+		input.DeclaredMonthlyDebtPaymentKopecks,
+	); err != nil {
+		return err
+	}
+
+	firstDay := time.Date(
+		date.Year(), date.Month(), 1,
+		0, 0, 0, 0, time.UTC,
+	)
+
+	expected := make(map[string]bool, 6)
+	for i := 1; i <= 6; i++ {
+		expected[firstDay.AddDate(0, -i, 0).Format("2006-01")] = true
+	}
+
+	for _, month := range input.Financials {
+		if !expected[month.PeriodMonth] {
+			return fmt.Errorf(
+				"financial month %s is outside the reporting period",
+				month.PeriodMonth,
+			)
+		}
+	}
+
+	return nil
 }
 
 func requiredFields(data []byte, names ...string) (map[string]json.RawMessage, error) {
