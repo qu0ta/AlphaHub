@@ -9,6 +9,43 @@ from schemas import (
 )
 
 
+PROFILES = {
+    "stable": {
+        "inn": "7700000016",
+        "revenue_volatility": 0.04,
+        "monthly_trend": 0.0,
+        "inflow_ratio": (0.95, 1.05),
+        "outflow_ratio": (0.50, 0.68),
+        "tax_ratio": (0.04, 0.07),
+        "debt_ratio": (0.02, 0.06),
+        "amount_kopecks": 300_000_000,
+        "term_months": 12,
+    },
+    "medium": {
+        "inn": "7700000023",
+        "revenue_volatility": 0.25,
+        "monthly_trend": 0.0,
+        "inflow_ratio": (0.90, 1.05),
+        "outflow_ratio": (0.68, 0.87),
+        "tax_ratio": (0.05, 0.08),
+        "debt_ratio": (0.08, 0.16),
+        "amount_kopecks": 400_000_000,
+        "term_months": 18,
+    },
+    "risky": {
+        "inn": "7700000030",
+        "revenue_volatility": 0.02,
+        "monthly_trend": -0.12,
+        "inflow_ratio": (0.80, 0.97),
+        "outflow_ratio": (1.02, 1.20),
+        "tax_ratio": (0.04, 0.07),
+        "debt_ratio": (0.25, 0.40),
+        "amount_kopecks": 600_000_000,
+        "term_months": 12,
+    },
+}
+
+
 def generate_month(month: str, revenue: int, rng: random.Random) -> MonthlyFinancials:
     inflow = round(revenue * rng.uniform(0.90, 1.05))
 
