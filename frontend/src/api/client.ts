@@ -49,13 +49,16 @@ interface LoginResponse {
   token_type: "Bearer";
 }
 
+/** Пользователь в формате Go-бэкенда: ФИО приходит в поле fullName. */
 interface ApiUser {
   id: string;
-  name: string;
+  fullName: string;
   email: string;
   role: Role;
   company_id?: string | null;
 }
+
+const toUser = (user: ApiUser): User => ({ id: user.id, name: user.fullName, email: user.email, role: user.role, company_id: user.company_id ?? null });
 
 export const authApi = {
   async login(email: string, password: string): Promise<{ token: string; user: User }> {
@@ -65,20 +68,21 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     });
     const user = await request<ApiUser>("/auth/me", { token: session.access_token });
-    return { token: session.access_token, user };
+    return { token: session.access_token, user: toUser(user) };
   },
 
   async register(name: string, email: string, password: string): Promise<User> {
     if (API_MODE === "mock") return mockAuth.register(name, email);
-    return request<ApiUser>("/auth/register", {
+    const user = await request<ApiUser>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ fullName: name, email, password }),
     });
+    return toUser(user);
   },
 
   async me(token: string): Promise<User> {
     if (API_MODE === "mock") return mockAuth.me(token);
-    return request<ApiUser>("/auth/me", { token });
+    return toUser(await request<ApiUser>("/auth/me", { token }));
   },
 };
 
