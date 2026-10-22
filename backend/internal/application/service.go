@@ -92,6 +92,15 @@ func (s Service) Update(ctx context.Context, id, userID string, req UpdateReques
 		return nil, ErrInvalidInput
 	}
 
+	if req.Purpose != nil {
+		purpose := strings.TrimSpace(*req.Purpose)
+
+		if len([]rune(purpose)) > 2000 {
+			return nil, ErrInvalidInput
+		}
+
+		req.Purpose = &purpose
+	}
 	return s.repo.Update(ctx, id, userID, req)
 }
 

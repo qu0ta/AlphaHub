@@ -29,7 +29,6 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
 	}
 
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return errors.New("only one JSON object is allowed")
 	}
 	return nil
@@ -49,6 +48,10 @@ func writeJSON(
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	err := decodeJSON(w, r, &req)
+	if err := decodeJSON(w, r, &req); err != nil {
+		http.Error(w, "Invalid login request", http.StatusBadRequest)
+		return
+	}
 
 	if strings.TrimSpace(req.Email) == "" || req.Password == "" {
 		http.Error(w, "Email and password are required", http.StatusBadRequest)
