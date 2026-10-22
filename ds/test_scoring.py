@@ -3,7 +3,10 @@ from dataclasses import replace
 from decimal import Decimal
 
 from metrics import calculate_financial_metrics
-from scoring import calculate_score, score_application
+from scoring import (
+    calculate_score_from_metrics as calculate_score,
+    score_application,
+)
 from test_metrics import make_input
 
 

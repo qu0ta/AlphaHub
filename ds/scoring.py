@@ -1,13 +1,21 @@
 from decimal import Decimal
 
 from metrics import FinancialMetrics, calculate_financial_metrics
-from schemas import ScoringInput, ScoringExplanation, ScoringResponse
+from schemas import (
+    ScoringInput,
+    ScoringExplanation,
+    ScoringResponse,
+    ScoreComponents,
+    DetailedScoringResponse,
+)
 
 
 MODEL_VERSION = "financial_rules_v1"
 
 
-def calculate_score(metrics: FinancialMetrics) -> ScoringResponse:
+def calculate_score_from_metrics(
+    metrics: FinancialMetrics,
+) -> DetailedScoringResponse:    
     positive = []
     negative = []
 
@@ -103,13 +111,27 @@ def calculate_score(metrics: FinancialMetrics) -> ScoringResponse:
             "минимум на 5% относительно первых трёх"
         )
 
-    score = coverage_points + stability_points + growth_points
+    components = ScoreComponents(
+        coverage_points=coverage_points,
+        stability_points=stability_points,
+        growth_points=growth_points,
+    )
 
-    if coverage < Decimal("1"):
-        score = min(score, 39)
+    raw_score = sum(components.model_dump().values())
 
-    return ScoringResponse(
+    score_cap = 39 if coverage < Decimal("1") else None
+
+    score = (
+        min(raw_score, score_cap)
+        if score_cap is not None
+        else raw_score
+    )
+
+    return DetailedScoringResponse(
         score=score,
+        components=components,
+        raw_score=raw_score,
+        score_cap=score_cap,
         explanation=ScoringExplanation(
             positive_factors=positive,
             negative_factors=negative,
@@ -118,6 +140,20 @@ def calculate_score(metrics: FinancialMetrics) -> ScoringResponse:
     )
 
 
-def score_application(data: ScoringInput) -> ScoringResponse:
+def calculate_score(
+    data: ScoringInput,
+) -> DetailedScoringResponse:
     metrics = calculate_financial_metrics(data)
-    return calculate_score(metrics)
+    return calculate_score_from_metrics(metrics)
+
+
+def score_application(
+    data: ScoringInput,
+) -> ScoringResponse:
+    result = calculate_score(data)
+
+    return ScoringResponse(
+        score=result.score,
+        explanation=result.explanation,
+        model_version=result.model_version,
+    )
