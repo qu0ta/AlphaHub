@@ -61,6 +61,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 
 	case errors.Is(err, ErrVersionConflict):
 		http.Error(w, "Application version conflict", http.StatusConflict)
+	case errors.Is(err, ErrIncompleteApplication):
+		http.Error(w, "Application has incomplete or invalid data", http.StatusUnprocessableEntity)
 
 	default:
 		log.Printf("application error: %v", err)
@@ -86,7 +88,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Location", "/api/v1/application/"+app.ID)
+	w.Header().Set("Location", "/api/v1/applications/"+app.ID)
 	writeJSON(w, http.StatusCreated, app)
 }
 
@@ -132,6 +134,21 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app, err := h.service.Update(r.Context(), r.PathValue("id"), userID, req)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, app)
+}
+
+func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+
+	app, err := h.service.Submit(r.Context(), id, userID)
 	if err != nil {
 		writeServiceError(w, err)
 		return

@@ -189,3 +189,123 @@ func (r *PostgresRepository) Update(ctx context.Context, id, userID string, req 
 	return updated, nil
 
 }
+func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Application, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin submit tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	const selectQuery = `SELECT ` + applicationColumns + ` FROM applications WHERE id = $1 AND created_by_user_id = $2 FOR UPDATE`
+	current, err := scanApplication(tx.QueryRow(ctx, selectQuery, id, userID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock application: %w", err)
+	}
+	if current.Status != "DRAFT" {
+		return nil, ErrNotDraft
+	}
+	if current.CompanyID == nil ||
+		current.RequestedAmountKopecks == nil ||
+		current.RequestedTermMonths == nil ||
+		current.Purpose == "" {
+		return nil, ErrIncompleteApplication
+	}
+	var companyAccess bool
+
+	err = tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND company_id = $2)`,
+		userID, *current.CompanyID).Scan(&companyAccess)
+	if err != nil {
+		return nil, fmt.Errorf("check company access: %w", err)
+	}
+
+	if !companyAccess {
+		return nil, ErrIncompleteApplication
+	}
+
+	var (
+		minAmount int64
+		maxAmount int64
+		minTerm   int
+		maxTerm   int
+	)
+
+	err = tx.QueryRow(ctx, `
+		SELECT
+			min_amount_kopecks,
+			max_amount_kopecks,
+			min_term_months,
+			max_term_months
+		FROM products
+		WHERE code = $1
+		  AND is_active = true
+	`, current.ProductCode).Scan(
+		&minAmount,
+		&maxAmount,
+		&minTerm,
+		&maxTerm,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrProductMissing
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load product limits: %w", err)
+	}
+
+	amount := *current.RequestedAmountKopecks
+	term := *current.RequestedTermMonths
+
+	if amount < minAmount || amount > maxAmount ||
+		term < minTerm || term > maxTerm {
+		return nil, ErrIncompleteApplication
+	}
+
+	const updateQuery = `
+		UPDATE applications
+		SET	status = 'SUBMITTED',
+			submitted_at = now(),
+			updated_at = now()
+		WHERE id = $1
+		  AND created_by_user_id = $2
+		  AND status = 'DRAFT'
+		RETURNING ` + applicationColumns
+	submitted, err := scanApplication(tx.QueryRow(ctx, updateQuery, id, userID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotDraft
+	}
+	if err != nil {
+		return nil, fmt.Errorf("submit application: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO status_history (
+			id,
+			application_id,
+			changed_by_user_id,
+			from_status,
+			to_status,
+			reason
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`,
+		uuid.NewString(),
+		id,
+		userID,
+		"DRAFT",
+		"SUBMITTED",
+		"Application submitted by client",
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("insert status history: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit application submit: %w", err)
+	}
+
+	return submitted, nil
+}

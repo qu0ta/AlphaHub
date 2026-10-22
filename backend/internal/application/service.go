@@ -9,11 +9,12 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("application not found")
-	ErrInvalidInput    = errors.New("invalid application input")
-	ErrProductMissing  = errors.New("product not found or inactive")
-	ErrVersionConflict = errors.New("application version conflict")
-	ErrNotDraft        = errors.New("application is not a draft")
+	ErrNotFound              = errors.New("application not found")
+	ErrInvalidInput          = errors.New("invalid application input")
+	ErrProductMissing        = errors.New("product not found or inactive")
+	ErrVersionConflict       = errors.New("application version conflict")
+	ErrNotDraft              = errors.New("application is not a draft")
+	ErrIncompleteApplication = errors.New("application has incomplete or invalid data")
 )
 
 type Repository interface {
@@ -21,13 +22,19 @@ type Repository interface {
 	List(ctx context.Context, userID string) ([]Application, error)
 	GetByID(ctx context.Context, id, userID string) (*Application, error)
 	Update(ctx context.Context, id, userID string, req UpdateRequest) (*Application, error)
+	Submit(ctx context.Context, id, userID string) (*Application, error)
 }
 
 type Service struct {
 	repo Repository
 }
 
-func (s Service) Create(ctx context.Context, userID string, req CreateRequest) (*Application, error) {
+func NewService(repo Repository) *Service {
+	return &Service{
+		repo: repo,
+	}
+}
+func (s *Service) Create(ctx context.Context, userID string, req CreateRequest) (*Application, error) {
 	_, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, ErrInvalidInput
@@ -42,7 +49,7 @@ func (s Service) Create(ctx context.Context, userID string, req CreateRequest) (
 	return s.repo.Create(ctx, userID, productCode)
 }
 
-func (s Service) List(ctx context.Context, userID string) ([]Application, error) {
+func (s *Service) List(ctx context.Context, userID string) ([]Application, error) {
 	_, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, ErrInvalidInput
@@ -51,7 +58,7 @@ func (s Service) List(ctx context.Context, userID string) ([]Application, error)
 	return s.repo.List(ctx, userID)
 }
 
-func (s Service) GetByID(ctx context.Context, id, userID string) (*Application, error) {
+func (s *Service) GetByID(ctx context.Context, id, userID string) (*Application, error) {
 	if _, err := uuid.Parse(id); err != nil {
 		return nil, ErrInvalidInput
 	}
@@ -63,7 +70,7 @@ func (s Service) GetByID(ctx context.Context, id, userID string) (*Application, 
 	return s.repo.GetByID(ctx, id, userID)
 }
 
-func (s Service) Update(ctx context.Context, id, userID string, req UpdateRequest) (*Application, error) {
+func (s *Service) Update(ctx context.Context, id, userID string, req UpdateRequest) (*Application, error) {
 	if _, err := uuid.Parse(id); err != nil {
 		return nil, ErrInvalidInput
 	}
@@ -104,8 +111,13 @@ func (s Service) Update(ctx context.Context, id, userID string, req UpdateReques
 	return s.repo.Update(ctx, id, userID, req)
 }
 
-func NewService(repo Repository) *Service {
-	return &Service{
-		repo: repo,
+func (s *Service) Submit(ctx context.Context, id, userID string) (*Application, error) {
+
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, ErrInvalidInput
 	}
+	if _, err := uuid.Parse(userID); err != nil {
+		return nil, ErrInvalidInput
+	}
+	return s.repo.Submit(ctx, id, userID)
 }
