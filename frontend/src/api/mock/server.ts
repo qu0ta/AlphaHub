@@ -427,7 +427,8 @@ export const mockApplications = {
     return clone(getOwnApplication(db, userId, id));
   },
 
-  async create(userId: string, productCode: string): Promise<Application> {
+  /** id передаётся в режиме api: заявку создал бэкенд, мок хранит её расширенные данные под тем же id. */
+  async create(userId: string, productCode: string, id?: string): Promise<Application> {
     await delay();
     const p = MOCK_PRODUCTS.find((item) => item.code === productCode);
     if (!p || !p.active) throw new ApiError(400, "Product not found or inactive");
@@ -437,7 +438,7 @@ export const mockApplications = {
       db.sequence += 1;
       const createdAt = now();
       const app: Application = {
-        id: uid("app"),
+        id: id ?? uid("app"),
         number: `AH-${db.sequence}`,
         userId,
         productCode,
