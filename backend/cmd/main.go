@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/qu0ta/AlphaHub/internal/application"
 	"github.com/qu0ta/AlphaHub/internal/auth"
-	"github.com/qu0ta/AlphaHub/internal/dsclient"
 	"github.com/qu0ta/AlphaHub/internal/platform/db"
 	"github.com/qu0ta/AlphaHub/internal/product"
 )
@@ -31,11 +31,11 @@ func main() {
 	defer pool.Close()
 	log.Println("PostgreSQL connected")
 
-	dsClient, err := dsclient.NewClient(os.Getenv("DS_BASE_URL"))
-	if err != nil {
-		log.Fatalf("Init DS client: %v", err)
-	}
-	_ = dsClient
+	//dsClient, err := dsclient.NewClient(os.Getenv("DS_BASE_URL"))
+	//if err != nil {
+	//	log.Fatalf("Init DS client: %v", err)
+	//}
+	//_ = dsClient
 
 	mux := http.NewServeMux()
 
@@ -45,6 +45,12 @@ func main() {
 		log.Fatal("Auth initialization failed: ", err)
 	}
 	authHandler := auth.NewHandler(authService)
+
+	clientOnly := func(handler http.HandlerFunc) http.Handler {
+		return authHandler.RequireAuth(
+			auth.RequireRole("CLIENT")(handler),
+		)
+	}
 
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
@@ -57,6 +63,30 @@ func main() {
 	mux.HandleFunc("GET /api/v1/products", productHandler.GetAll)
 	mux.HandleFunc("GET /api/v1/products/{code}", productHandler.GetByCode)
 
+	applicationRepo := application.NewPostgresRepository(pool)
+	applicationService := application.NewService(applicationRepo)
+	applicationHandler := application.NewHandler(applicationService)
+
+	mux.Handle(
+		"POST /api/v1/applications",
+		clientOnly(applicationHandler.Create),
+	)
+	mux.Handle(
+		"GET /api/v1/applications",
+		clientOnly(applicationHandler.List),
+	)
+	mux.Handle(
+		"GET /api/v1/applications/{id}",
+		clientOnly(applicationHandler.GetByID),
+	)
+	mux.Handle(
+		"PATCH /api/v1/applications/{id}",
+		clientOnly(applicationHandler.Update),
+	)
+	mux.Handle(
+		"POST /api/v1/applications/{id}/submit",
+		clientOnly(applicationHandler.Submit),
+	)
 	//mux.Handle(
 	//	"GET /api/v1/client/test",
 	//	authHandler.RequireAuth(

@@ -26,7 +26,7 @@ func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (*Us
 		WHERE LOWER(email) = LOWER($1)
 	`
 	var user User
-	err := scanUser(ctx, email, r, query, user)
+	err := scanUser(ctx, email, r, query, &user)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -36,7 +36,7 @@ func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (*Us
 	return &user, nil
 }
 
-func scanUser(ctx context.Context, email string, r *PostgresRepository, query string, user User) error {
+func scanUser(ctx context.Context, email string, r *PostgresRepository, query string, user *User) error {
 	return r.pool.QueryRow(ctx, query, email).Scan(
 		&user.ID,
 		&user.FullName,
