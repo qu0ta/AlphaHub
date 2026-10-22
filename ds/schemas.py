@@ -103,3 +103,15 @@ class ScoringResponse(BaseModel):
     score: int = Field(ge=0, le=100)
     explanation: ScoringExplanation
     model_version: str
+
+
+class ScoreComponents(BaseModel):
+    coverage_points: int = Field(ge=0, le=60)
+    stability_points: int = Field(ge=0, le=20)
+    growth_points: int = Field(ge=0, le=20)
+
+
+class DetailedScoringResponse(ScoringResponse):
+    components: ScoreComponents
+    raw_score: int = Field(ge=0, le=100)
+    score_cap: int | None = Field(default=None, ge=0, le=100)
