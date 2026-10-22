@@ -1,0 +1,52 @@
+{
+  "inn": "7700000023",
+  "amount_kopecks": 400000000,
+  "term_months": 18,
+  "annual_rate_bps": 1990,
+  "application_date": "2026-10-22",
+  "financials": [
+    {
+      "period_month": "2026-04",
+      "revenue_kopecks": 72394245,
+      "operating_inflow_kopecks": 68141401,
+      "operating_outflow_kopecks": 49226032,
+      "tax_outflow_kopecks": 5219201
+    },
+    {
+      "period_month": "2026-05",
+      "revenue_kopecks": 103330758,
+      "operating_inflow_kopecks": 106826121,
+      "operating_outflow_kopecks": 74406357,
+      "tax_outflow_kopecks": 6474463
+    },
+    {
+      "period_month": "2026-06",
+      "revenue_kopecks": 72621465,
+      "operating_inflow_kopecks": 67740990,
+      "operating_outflow_kopecks": 52568194,
+      "tax_outflow_kopecks": 3688886
+    },
+    {
+      "period_month": "2026-07",
+      "revenue_kopecks": 80646034,
+      "operating_inflow_kopecks": 80443021,
+      "operating_outflow_kopecks": 63030235,
+      "tax_outflow_kopecks": 4565632
+    },
+    {
+      "period_month": "2026-08",
+      "revenue_kopecks": 99180161,
+      "operating_inflow_kopecks": 101304061,
+      "operating_outflow_kopecks": 69011848,
+      "tax_outflow_kopecks": 7356647
+    },
+    {
+      "period_month": "2026-09",
+      "revenue_kopecks": 104348538,
+      "operating_inflow_kopecks": 99239381,
+      "operating_outflow_kopecks": 70414420,
+      "tax_outflow_kopecks": 8213940
+    }
+  ],
+  "declared_monthly_debt_payment_kopecks": 10151981
+}
