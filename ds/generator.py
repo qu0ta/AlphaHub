@@ -64,6 +64,8 @@ def generate_company_financials(
         inn="7701234567",
         amount_kopecks=300_000_000,
         term_months=12,
+        annual_rate_bps=1990,
+        application_date=reference_date,
         financials=financials,
         declared_monthly_debt_payment_kopecks=debt_payment,
     )
