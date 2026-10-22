@@ -45,7 +45,7 @@ class MonthlyFinancials(BaseModel):
 
 
 class ScoringInput(BaseModel):
-    # Из данных компании
+    # Из данных компании 
     inn: str
 
     # Из Application на Go
@@ -76,3 +76,23 @@ class ScoringInput(BaseModel):
             )
 
         return self
+
+
+class FinancialExtractionResponse(BaseModel):
+    inn: str
+    financials: list[MonthlyFinancials] = Field(
+        min_length=6,
+        max_length=6
+    )
+    declared_monthly_debt_payment_kopecks: int = Field(ge=0)
+
+
+class ScoringExplanation(BaseModel):
+    positive_factors: list[str]
+    negative_factors: list[str]
+
+
+class ScoringResponse(BaseModel):
+    score: int = Field(ge=0, le=100)
+    explanation: ScoringExplanation
+    model_version: str
