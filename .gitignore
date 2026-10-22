@@ -1,4 +1,3 @@
-
 # =========================
 # IDE / Editors
 # =========================
@@ -92,3 +91,5 @@ pgdata/
 # =========================
 uploads/
 storage/
+frontend/vite.config.js
+frontend/vite.config.d.ts

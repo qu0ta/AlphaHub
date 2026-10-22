@@ -1,0 +1,502 @@
+/* ===== Каркас кабинета: боковое меню + рабочая область ===== */
+.app-shell {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100vh;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+  overflow-y: auto;
+  /* по горизонтали 16px: так «Компания и документы» помещается в одну строку */
+  padding: 24px 16px;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.sidebar__top {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.sidebar__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0 8px;
+}
+
+.sidebar__caption {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: 14px;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.sidebar__link:hover {
+  background: var(--color-bg);
+}
+
+.sidebar__link--active,
+.sidebar__link--active:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.sidebar__profile {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 8px 0;
+  border-top: 1px solid var(--color-border-strong);
+}
+
+.sidebar__user {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__logout {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sidebar__logout:hover {
+  color: var(--color-primary);
+}
+
+.workspace {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+/* ===== Верхняя панель с хлебными крошками ===== */
+.topbar {
+  display: flex;
+  height: var(--topbar-height);
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 var(--page-padding-x);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  list-style: none;
+}
+
+.breadcrumbs__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.breadcrumbs__item a:hover {
+  color: var(--color-text);
+}
+
+.breadcrumbs__item--current {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+/* ===== Содержимое страницы ===== */
+.page {
+  display: flex;
+  width: 100%;
+  max-width: calc(var(--content-max-width) + var(--page-padding-x) * 2);
+  flex-direction: column;
+  gap: 32px;
+  padding: 48px var(--page-padding-x) 64px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.page-header__text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page-header__title {
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.page-header__subtitle {
+  color: var(--color-text-muted);
+  font-size: 15px;
+}
+
+.page-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.page-header__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+/* Две колонки: основная + боковая 384px */
+.columns {
+  display: grid;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 384px);
+  gap: 24px;
+}
+
+.columns__side {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+}
+
+.form-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stack--8 {
+  gap: 8px;
+}
+
+.stack--12 {
+  gap: 12px;
+}
+
+.stack--20 {
+  gap: 20px;
+}
+
+.stack--24 {
+  gap: 24px;
+}
+
+.stack--28 {
+  gap: 28px;
+}
+
+.stack--32 {
+  gap: 32px;
+}
+
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.actions-row--between {
+  justify-content: space-between;
+}
+
+/* ===== Экраны входа и регистрации ===== */
+.auth {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: minmax(0, 760fr) minmax(0, 680fr);
+  background: var(--color-surface);
+}
+
+.auth__panel {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 48px;
+  padding: 48px clamp(32px, 5.56vw, 80px);
+}
+
+.auth__form {
+  display: flex;
+  width: 100%;
+  max-width: 440px;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.auth__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth__title {
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.auth__subtitle {
+  color: var(--color-text-muted);
+  font-size: 15px;
+}
+
+.auth__switch {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.auth__switch a {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.auth__footer {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 24px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.auth__secure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.promo {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 40px;
+  padding: 56px clamp(32px, 4vw, 56px);
+  background: var(--color-bg);
+}
+
+.promo__tag {
+  width: fit-content;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.promo__lead {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.promo__title {
+  font-size: clamp(34px, 3.1vw, 44px);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+}
+
+.promo__text {
+  color: var(--color-text-muted);
+  font-size: 17px;
+}
+
+.promo__card {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 32px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.promo__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.promo__card-head svg {
+  color: var(--color-primary);
+}
+
+.promo__amount {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.promo__amount span {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.promo__amount strong {
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.promo__chart {
+  display: flex;
+  height: 140px;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.promo__chart i {
+  flex: 1;
+  border-radius: 8px 8px 0 0;
+  background: var(--color-primary-soft);
+}
+
+.promo__chart i:nth-child(5) {
+  background: var(--color-primary-mid);
+}
+
+.promo__chart i:nth-child(6) {
+  background: var(--color-primary);
+}
+
+.promo__note {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.promo__benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.promo__benefits li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.promo__benefits svg {
+  color: var(--color-primary);
+}
+
+.promo__footnote {
+  margin-top: auto;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/*
+  Узкий десктоп и масштаб браузера > 100 %:
+  промо-колонку убираем, форма занимает всю ширину,
+  чтобы не было горизонтального скролла.
+*/
+@media (max-width: 1080px) {
+  .auth {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .promo {
+    display: none;
+  }
+}
+
+/* Две колонки на узком экране превращаются в одну — иначе основная колонка слишком узкая */
+@media (max-width: 1240px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --sidebar-width: 224px;
+    --page-padding-x: 32px;
+  }
+
+  .grid-2,
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
