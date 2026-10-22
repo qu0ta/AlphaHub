@@ -63,6 +63,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		http.Error(w, "Application version conflict", http.StatusConflict)
 	case errors.Is(err, ErrIncompleteApplication):
 		http.Error(w, "Application has incomplete or invalid data", http.StatusUnprocessableEntity)
+	case errors.Is(err, ErrCompanyAccessDenied):
+		http.Error(w, "Company access denied", http.StatusForbidden)
 
 	default:
 		log.Printf("application error: %v", err)

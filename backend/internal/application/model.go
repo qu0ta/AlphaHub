@@ -27,6 +27,7 @@ type CreateRequest struct {
 }
 
 type UpdateRequest struct {
+	CompanyID              *string `json:"company_id,omitempty"`
 	RequestedAmountKopecks *int64  `json:"requested_amount_kopecks,omitempty"`
 	RequestedTermMonths    *int    `json:"requested_term_months,omitempty"`
 	Purpose                *string `json:"purpose,omitempty"`

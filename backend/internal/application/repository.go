@@ -137,6 +137,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, id, userID string) (*A
 
 }
 func (r *PostgresRepository) Update(ctx context.Context, id, userID string, req UpdateRequest) (*Application, error) {
+
 	if req.DataVersion == nil {
 		return nil, ErrInvalidInput
 	}
@@ -160,13 +161,35 @@ func (r *PostgresRepository) Update(ctx context.Context, id, userID string, req 
 		return nil, ErrVersionConflict
 	}
 
+	if req.CompanyID != nil {
+		var allowed bool
+
+		err := tx.QueryRow(ctx, `
+        SELECT EXISTS (
+            SELECT 1
+            FROM users
+            WHERE id = $1
+              AND company_id = $2::uuid
+        )
+    `, userID, *req.CompanyID).Scan(&allowed)
+
+		if err != nil {
+			return nil, fmt.Errorf("check company access: %w", err)
+		}
+
+		if !allowed {
+			return nil, ErrCompanyAccessDenied
+		}
+	}
+
 	const updateQuery = `
 		UPDATE applications
-		SET requested_amount_kopecks =
-		        COALESCE($4::bigint, requested_amount_kopecks),
+		SET company_id = COALESCE($4::uuid, company_id),
+			requested_amount_kopecks =
+		        COALESCE($5::bigint, requested_amount_kopecks),
 		    requested_term_months =
-		        COALESCE($5::integer, requested_term_months),
-		    purpose = COALESCE($6::text, purpose),
+		        COALESCE($6::integer, requested_term_months),
+		    purpose = COALESCE($7::text, purpose),
 		    data_version = data_version + 1,
 		    updated_at = now()
 		WHERE id = $1
@@ -174,9 +197,19 @@ func (r *PostgresRepository) Update(ctx context.Context, id, userID string, req 
 		  AND data_version = $3
 		  AND status = 'DRAFT'
 		RETURNING ` + applicationColumns
-	updated, err := scanApplication(tx.QueryRow(
-		ctx, updateQuery, id, userID, *req.DataVersion, req.RequestedAmountKopecks,
-		req.RequestedTermMonths, req.Purpose))
+	updated, err := scanApplication(
+		tx.QueryRow(
+			ctx,
+			updateQuery,
+			id,
+			userID,
+			*req.DataVersion,
+			req.CompanyID, // Без *
+			req.RequestedAmountKopecks,
+			req.RequestedTermMonths,
+			req.Purpose,
+		),
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrVersionConflict
 	}

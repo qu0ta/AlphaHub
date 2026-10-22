@@ -15,6 +15,7 @@ var (
 	ErrVersionConflict       = errors.New("application version conflict")
 	ErrNotDraft              = errors.New("application is not a draft")
 	ErrIncompleteApplication = errors.New("application has incomplete or invalid data")
+	ErrCompanyAccessDenied   = errors.New("company access denied")
 )
 
 type Repository interface {
@@ -71,6 +72,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID string) (*Application,
 }
 
 func (s *Service) Update(ctx context.Context, id, userID string, req UpdateRequest) (*Application, error) {
+
 	if _, err := uuid.Parse(id); err != nil {
 		return nil, ErrInvalidInput
 	}
@@ -83,17 +85,16 @@ func (s *Service) Update(ctx context.Context, id, userID string, req UpdateReque
 		return nil, ErrInvalidInput
 	}
 
-	if req.RequestedAmountKopecks != nil &&
-		*req.RequestedAmountKopecks <= 0 {
-		return nil, ErrInvalidInput
+	if req.CompanyID != nil {
+		companyID := strings.TrimSpace(*req.CompanyID)
+		if _, err := uuid.Parse(companyID); err != nil {
+			return nil, ErrInvalidInput
+		}
+		req.CompanyID = &companyID
 	}
 
-	if req.RequestedTermMonths != nil &&
-		*req.RequestedTermMonths <= 0 {
-		return nil, ErrInvalidInput
-	}
-
-	if req.RequestedAmountKopecks == nil &&
+	if req.CompanyID == nil &&
+		req.RequestedAmountKopecks == nil &&
 		req.RequestedTermMonths == nil &&
 		req.Purpose == nil {
 		return nil, ErrInvalidInput
