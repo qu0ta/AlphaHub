@@ -46,6 +46,12 @@ func main() {
 	}
 	authHandler := auth.NewHandler(authService)
 
+	clientOnly := func(handler http.HandlerFunc) http.Handler {
+		return authHandler.RequireAuth(
+			auth.RequireRole("CLIENT")(handler),
+		)
+	}
+
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("GET /api/v1/auth/me", authHandler.Me)
@@ -60,12 +66,6 @@ func main() {
 	applicationRepo := application.NewPostgresRepository(pool)
 	applicationService := application.NewService(applicationRepo)
 	applicationHandler := application.NewHandler(applicationService)
-
-	clientOnly := func(handler http.HandlerFunc) http.Handler {
-		return authHandler.RequireAuth(
-			auth.RequireRole("CLIENT")(handler),
-		)
-	}
 
 	mux.Handle(
 		"POST /api/v1/applications",
@@ -82,6 +82,10 @@ func main() {
 	mux.Handle(
 		"PATCH /api/v1/applications/{id}",
 		clientOnly(applicationHandler.Update),
+	)
+	mux.Handle(
+		"POST /api/v1/applications/{id}/submit",
+		clientOnly(applicationHandler.Submit),
 	)
 	//mux.Handle(
 	//	"GET /api/v1/client/test",
