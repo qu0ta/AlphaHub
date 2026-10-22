@@ -90,6 +90,12 @@ def calculate_financial_metrics(
         if avg_revenue == 0:
             revenue_cv = None
             flags.append("ZERO_REVENUE")
+
+            if any(
+                record.operating_inflow_kopecks > 0
+                for record in records
+            ):
+                flags.append("ZERO_REVENUE_WITH_INFLOW")
         else:
             variance = sum(
                 (Decimal(value) - avg_revenue) ** 2
@@ -108,6 +114,10 @@ def calculate_financial_metrics(
             flags.append("ZERO_REVENUE_BASE")
         else:
             growth = revenue_change / early_revenue
+            
+        # Диагностический признак, а не решение по заявке.
+        if growth is not None and growth < Decimal("-0.20"):
+            flags.append("REVENUE_DECLINE_GT_20_PERCENT")
 
         new_payment = calculate_monthly_payment(
             amount_kopecks=data.amount_kopecks,
