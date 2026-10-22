@@ -18,20 +18,20 @@ func NewHandler(service *Service) *Handler {
 		service: service,
 	}
 }
-func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, 8192)
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
-	if err := decoder.Decode(&dst); err != nil {
+	if err := decoder.Decode(dst); err != nil {
 		return err
 	}
 
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return errors.New("only one JSON object is allowed")
 	}
+
 	return nil
 }
 
@@ -48,7 +48,11 @@ func writeJSON(
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
-	err := decodeJSON(w, r, &req)
+	if err := decodeJSON(w, r, &req); err != nil {
+		log.Printf("err: %v", err)
+		http.Error(w, "Invalid login request", http.StatusBadRequest)
+		return
+	}
 
 	if strings.TrimSpace(req.Email) == "" || req.Password == "" {
 		http.Error(w, "Email and password are required", http.StatusBadRequest)

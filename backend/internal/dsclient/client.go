@@ -17,6 +17,7 @@ import (
 const maxResponseBytes = 2 << 20
 
 var ErrDSUnavailable = errors.New("DS service unavailable")
+var ErrPDFTooLarge = errors.New("PDF exceeds 10 MiB")
 
 type Client struct {
 	baseURL    string
@@ -41,7 +42,14 @@ func NewClient(baseURL string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) ExtractFinancials(ctx context.Context, filename string, pdf []byte) (json.RawMessage, error) {
+func (c *Client) ExtractFinancials(ctx context.Context, filename string, pdf []byte) (*ExtractFinancialsResponse, error) {
+	if len(pdf) == 0 {
+		return nil, errors.New("PDF is empty")
+	}
+	if len(pdf) > 10*1024*1024 {
+		return nil, ErrPDFTooLarge
+	}
+
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 
@@ -65,29 +73,51 @@ func (c *Client) ExtractFinancials(ctx context.Context, filename string, pdf []b
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Accept", "application/json")
-	return c.send(req)
+	data, err := c.send(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return decodeFinancialExtraction(data)
 
 }
 
-func (c *Client) EvaluateScoring(ctx context.Context, payload json.RawMessage) (json.RawMessage, error) {
-	if !json.Valid(payload) {
-		return nil, errors.New("invalid scoring JSON")
+func (c *Client) EvaluateScoring(
+	ctx context.Context,
+	input ScoringInput,
+) (*ScoringResponse, error) {
+	if err := input.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid scoring input: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/scoring/evaluate", bytes.NewReader(payload))
+	payload, err := json.Marshal(input)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode scoring input: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.baseURL+"/api/v1/scoring/evaluate",
+		bytes.NewReader(payload),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create scoring request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	return c.send(req)
-}
+	data, err := c.send(req)
+	if err != nil {
+		return nil, err
+	}
 
+	return decodeScoring(data)
+}
 func (c *Client) send(req *http.Request) (json.RawMessage, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDSUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrDSUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -103,10 +133,28 @@ func (c *Client) send(req *http.Request) (json.RawMessage, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf(
-			"DS returned HTTP %d",
-			resp.StatusCode,
-		)
+		var envelope struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+
+		if err := json.Unmarshal(body, &envelope); err != nil ||
+			envelope.Error.Code == "" ||
+			envelope.Error.Message == "" {
+			return nil, &DSError{
+				StatusCode: resp.StatusCode,
+				Code:       "INVALID_ERROR_RESPONSE",
+				Message:    "DS returned an unexpected error format",
+			}
+		}
+
+		return nil, &DSError{
+			StatusCode: resp.StatusCode,
+			Code:       envelope.Error.Code,
+			Message:    envelope.Error.Message,
+		}
 	}
 
 	if !json.Valid(body) {
