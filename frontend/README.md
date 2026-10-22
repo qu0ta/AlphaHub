@@ -7,11 +7,12 @@ Desktop-кабинет кредитования малого бизнеса: Rea
 
 ```powershell
 Set-Location frontend
-pnpm install   # или npm install
-pnpm dev       # http://localhost:5173
+npm install
+npm run dev    # http://localhost:5173
 ```
 
-Проверка: `pnpm typecheck` и `pnpm build`.
+Проверка: `npm run typecheck` и `npm run build`.
+Менеджер пакетов — только npm (lock-файл `package-lock.json`), pnpm не используем.
 
 ## Демо-режим (по умолчанию)
 
