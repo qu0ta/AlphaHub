@@ -95,7 +95,9 @@
     ],
     "declared_monthly_debt_payment_kopecks": 2000000,
     "amount_kopecks": 50000000,
-    "term_months": 12
+    "term_months": 12,
+    "annual_rate_bps": 1990,
+    "application_date": "2026-10-23"
   },
   "ScoringResponse": {
     "score": 65,

@@ -187,7 +187,9 @@
                 ],
                 "declared_monthly_debt_payment_kopecks": 2000000,
                 "amount_kopecks": 50000000,
-                "term_months": 12
+                "term_months": 12,
+                "annual_rate_bps": 1990,
+                "application_date": "2026-10-23"
               }
             }
           }
@@ -313,7 +315,9 @@
           "amount_kopecks",
           "term_months",
           "financials",
-          "declared_monthly_debt_payment_kopecks"
+          "declared_monthly_debt_payment_kopecks",
+          "annual_rate_bps",
+          "application_date"
         ],
         "properties": {
           "inn": {
@@ -337,12 +341,22 @@
             "items": {
               "$ref": "#/components/schemas/MonthlyFinancials"
             },
-            "description": "Six distinct reporting months. Month uniqueness is validated by the application."
+            "description": "Six full months preceding application_date, in chronological order."
           },
           "declared_monthly_debt_payment_kopecks": {
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          },
+          "annual_rate_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Annual rate in basis points; 1990 = 19.90%"
+          },
+          "application_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Original submission date, YYYY-MM-DD, not earlier than 0001-07-01"
           }
         }
       },
