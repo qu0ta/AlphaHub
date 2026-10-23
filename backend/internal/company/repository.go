@@ -59,7 +59,7 @@ func (r *PostgresRepository) CreateForUser(ctx context.Context, userID string, c
 	defer tx.Rollback(ctx)
 
 	var currentCompanyID *string
-	err := tx.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`SELECT company_id FROM users WHERE id = $1 FOR UPDATE`,
 		userID).Scan(&currentCompanyID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -83,9 +83,36 @@ func (r *PostgresRepository) CreateForUser(ctx context.Context, userID string, c
 	}
 
 	result, err := tx.Exec(ctx, `UPDATE users SET company_id = $1 WHERE id = $2 AND company_id IS NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("link company to user: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return nil, ErrAlreadyLinked
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit company creation: %w", err)
+	}
+	return created, nil
 }
 
 func (r *PostgresRepository) GetByUserID(ctx context.Context, userID string) (*Company, error) {
-	//TODO implement me
-	panic("implement me")
+	const query = `
+		SELECT ` + companyColumns + `
+		FROM companies AS c
+		JOIN users AS u ON u.company_id = c.id
+		WHERE u.id = $1
+	`
+
+	company, err := scanCompany(
+		r.pool.QueryRow(ctx, query, userID),
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get user company: %w", err)
+	}
+
+	return company, nil
 }

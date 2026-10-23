@@ -68,7 +68,7 @@ func (s *Service) Create(ctx context.Context, userID string, req CreateRequest) 
 		return nil, ErrInvalidInput
 	}
 	stringDate := strings.TrimSpace(req.RegistrationDate)
-	regDate, err := time.Parse("2006-02-01", stringDate)
+	regDate, err := time.Parse("2006-01-02", stringDate)
 	if err != nil ||
 		regDate.Year() < 1 ||
 		regDate.Format("2006-01-02") != stringDate {
