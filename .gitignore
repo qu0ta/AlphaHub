@@ -1,0 +1,15 @@
+.venv/
+.venv-docling/
+.venv-old/
+
+__pycache__/
+*.pyc
+
+
+/ds/docling_output/
+
+
+/ds/real_pdf_samples/
+
+
+.DS_Store
