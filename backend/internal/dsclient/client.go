@@ -43,6 +43,7 @@ func NewClient(baseURL string) (*Client, error) {
 }
 
 func (c *Client) ExtractFinancials(ctx context.Context, filename string, pdf []byte) (*ExtractFinancialsResponse, error) {
+
 	if len(pdf) == 0 {
 		return nil, errors.New("PDF is empty")
 	}
