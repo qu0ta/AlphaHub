@@ -12,6 +12,7 @@ import (
 	"github.com/qu0ta/AlphaHub/internal/auth"
 	"github.com/qu0ta/AlphaHub/internal/company"
 	"github.com/qu0ta/AlphaHub/internal/documents"
+	"github.com/qu0ta/AlphaHub/internal/financials"
 	"github.com/qu0ta/AlphaHub/internal/platform/db"
 	"github.com/qu0ta/AlphaHub/internal/product"
 )
@@ -133,6 +134,24 @@ func main() {
 	mux.Handle(
 		"GET /api/v1/applications/{id}/documents",
 		clientOnly(documentHandler.List),
+	)
+	financialRepo := financials.NewRepository(pool)
+	financialService := financials.NewService(financialRepo)
+	financialHandler := financials.NewHandler(financialService)
+
+	mux.Handle(
+		"GET /api/v1/applications/{id}/financials",
+		clientOnly(financialHandler.Get),
+	)
+
+	mux.Handle(
+		"PUT /api/v1/applications/{id}/financials",
+		clientOnly(financialHandler.Update),
+	)
+
+	mux.Handle(
+		"POST /api/v1/applications/{id}/financials/confirm",
+		clientOnly(financialHandler.Confirm),
 	)
 	//mux.Handle(
 	//	"GET /api/v1/client/test",
