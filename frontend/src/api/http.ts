@@ -22,7 +22,7 @@ export async function request<T>(path: string, options: RequestInit & { token?: 
   const { token, ...init } = options;
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
-  if (init.body) headers.set("Content-Type", "application/json");
+  if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetch(`${API_BASE}/api/v1${path}`, { ...init, headers, credentials: "omit" });

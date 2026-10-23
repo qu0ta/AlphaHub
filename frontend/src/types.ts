@@ -31,6 +31,7 @@ export interface RegistryCompany {
 }
 
 export interface Company extends RegistryCompany {
+  id?: string;
   representativeName: string;
   representativePosition: RepresentativePosition;
   representativePositionOther: string;
@@ -100,7 +101,7 @@ export interface FinancialDocument {
   name: string;
   sizeBytes: number;
   uploadedAt: string;
-  status: "PROCESSING" | "EXTRACTED" | "ERROR";
+  status: "UPLOADED" | "PROCESSING" | "EXTRACTED" | "ERROR";
   error?: string;
 }
 
