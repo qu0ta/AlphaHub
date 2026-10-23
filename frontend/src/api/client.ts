@@ -129,7 +129,7 @@ export const companyApi = {
   async lookup(inn: string, token?: string | null): Promise<RegistryCompany> {
     if (API_MODE === "mock") return mockCompany.lookup(inn);
     try {
-      return fromApiCompany(await request<ApiCompany>(`/companies/by-inn/${encodeURIComponent(inn)}`, { token: token ?? undefined }));
+      return fromApiCompany(await request<ApiCompany>(`/company/by-inn/${encodeURIComponent(inn)}`, { token: token ?? undefined }));
     } catch (reason) {
       // Backend ищет только в локальной БД. Demo-реестр временно имитирует внешний ЕГРЮЛ/ЕГРИП.
       if (reason instanceof ApiError && reason.status === 404) return mockCompany.lookup(inn);
@@ -140,7 +140,7 @@ export const companyApi = {
     const userId = currentUserId(token);
     if (API_MODE === "mock") return mockCompany.get(userId);
     try {
-      const company = fromApiCompany(await request<ApiCompany>("/companies/me", { token: token ?? undefined }));
+      const company = fromApiCompany(await request<ApiCompany>("/company/me", { token: token ?? undefined }));
       const local = await mockCompany.get(userId);
       const merged = local ? { ...company, representativeName: local.representativeName, representativePosition: local.representativePosition, representativePositionOther: local.representativePositionOther } : company;
       if (!merged.representativeName) {
@@ -159,7 +159,7 @@ export const companyApi = {
     if (API_MODE === "mock") return mockCompany.save(userId, company);
     let saved = company;
     if (!company.id) {
-      const row = await request<ApiCompany>("/companies", {
+      const row = await request<ApiCompany>("/company", {
         method: "POST",
         token: token ?? undefined,
         body: JSON.stringify({
