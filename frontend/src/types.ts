@@ -21,6 +21,7 @@ export type RepresentativePosition = "director" | "accountant" | "other";
 
 /** Сведения из реестра (ЕГРЮЛ/ЕГРИП) — клиент их не редактирует. */
 export interface RegistryCompany {
+  id?: string;
   inn: string;
   name: string;
   businessType: BusinessType;
@@ -191,3 +192,4 @@ export interface Application {
   decision: BankDecision | null;
   finalReason: string | null;
 }
+

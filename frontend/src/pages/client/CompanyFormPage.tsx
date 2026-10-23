@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, LoaderCircle, LockKeyhole, SearchX, ServerCrash } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError, companyApi } from "../../api/client";
+import { API_MODE, ApiError, companyApi } from "../../api/client";
 import { Page } from "../../components/layout/Page";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -23,6 +23,8 @@ type Lookup =
   | { state: "invalid"; message: string }
   | { state: "notFound" }
   | { state: "unavailable" };
+
+const lookupInnError = (value: string) => API_MODE === "mock" ? innError(value) : (/^(?:[0-9]{10}|[0-9]{12})$/.test(value) ? null : "Введите 10 или 12 цифр ИНН");
 
 const POSITION_OPTIONS = (Object.keys(POSITION_LABELS) as RepresentativePosition[]).map((value) => ({ value, label: POSITION_LABELS[value] }));
 
@@ -52,6 +54,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
   const [positionOther, setPositionOther] = useState("");
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [invitationCode, setInvitationCode] = useState("");
   const [saveError, setSaveError] = useState("");
   const lookupId = useRef(0);
 
@@ -72,7 +75,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
   }, [existing.data, user?.name]);
 
   const runLookup = async (value: string) => {
-    const error = innError(value);
+    const error = lookupInnError(value);
     if (error) {
       setLookup({ state: "invalid", message: error });
       return;
@@ -85,7 +88,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
     } catch (reason) {
       if (id !== lookupId.current) return;
       if (reason instanceof ApiError && reason.status === 404) setLookup({ state: "notFound" });
-      else if (reason instanceof ApiError && reason.status === 400) setLookup({ state: "invalid", message: "ИНН не прошёл проверку контрольной суммы" });
+      else if (reason instanceof ApiError && reason.status === 400) setLookup({ state: "invalid", message: "Некорректный ИНН" });
       else setLookup({ state: "unavailable" });
     }
   };
@@ -96,7 +99,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
     // Ищем автоматически, когда введено 10 или 12 цифр — без лишней кнопки.
     // На 10 цифрах ИП ещё может дописывать номер, поэтому 10-значный ИНН,
     // не прошедший проверку, не считаем ошибкой, пока не введено 12.
-    if (digits.length === 12 || (digits.length === 10 && !innError(digits))) void runLookup(digits);
+    if (digits.length === 12 || (digits.length === 10 && !lookupInnError(digits))) void runLookup(digits);
     else {
       lookupId.current += 1;
       setLookup({ state: "idle" });
@@ -104,7 +107,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
   };
 
   const found = lookup.state === "found" ? lookup.company : null;
-  const tooYoung = found ? isTooYoung(found.registrationDate) : false;
+  const tooYoung = API_MODE === "mock" && found ? isTooYoung(found.registrationDate) : false;
   const nameError = touched && name.trim().split(/\s+/).length < 2 ? "Укажите ФИО полностью" : null;
   const positionOtherError = touched && position === "other" && !positionOther.trim() ? "Укажите должность" : null;
   const innFieldError = lookup.state === "invalid" ? lookup.message : touched && !found ? "Найдите компанию по ИНН" : null;
@@ -121,10 +124,10 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
         representativeName: name.trim(),
         representativePosition: position,
         representativePositionOther: position === "other" ? positionOther.trim() : "",
-      });
+      }, invitationCode);
       navigate(next ?? (mode === "onboarding" ? "/products" : "/company"), { replace: true });
-    } catch {
-      setSaveError("Не удалось сохранить компанию. Повторите попытку.");
+    } catch (reason) {
+      setSaveError(reason instanceof ApiError ? reason.serverText : "Не удалось сохранить компанию. Повторите попытку.");
     } finally {
       setSaving(false);
     }
@@ -134,7 +137,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
     <Page
       crumbs={[{ label: mode === "onboarding" ? "Данные компании" : "Компания и документы", to: mode === "edit" ? "/company" : undefined }, ...(mode === "edit" ? [{ label: "Изменение данных" }] : [])]}
       title={mode === "onboarding" ? "Расскажите о компании" : "Изменение данных компании"}
-      subtitle="Найдём данные в реестре по ИНН — заполнять всё вручную не придётся."
+      subtitle={API_MODE === "api" ? "Найдите компанию в базе сервиса по ИНН." : "Найдём данные в реестре по ИНН."}
     >
       <div className="columns">
         <Card as="div">
@@ -159,6 +162,11 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
 
             <LookupResult lookup={lookup} tooYoung={tooYoung} onRetry={() => void runLookup(inn)} />
 
+            {API_MODE === "api" && found?.id && !existing.data && (
+              <TextField label="Код приглашения в компанию" value={invitationCode}
+                onChange={(event) => setInvitationCode(event.target.value)}
+                placeholder="Получите код у участника компании" />
+            )}
             <div className="form-grid">
               <TextField label="ФИО представителя" autoComplete="name" value={name} error={nameError} readOnly onChange={(event) => setName(event.target.value)} />
               <Select label="Должность" value={position} options={POSITION_OPTIONS} onChange={setPosition} />
@@ -195,7 +203,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
         <div className="columns__side">
           <InfoBlock title="Зачем нужны данные компании">Они помогут подготовить документы и связать будущие заявки с вашим бизнесом.</InfoBlock>
           <InfoBlock title="Откуда берутся данные" icon={<LockKeyhole size={20} />}>
-            Название, форму бизнеса, дату регистрации и ОКВЭД мы получаем из ЕГРЮЛ / ЕГРИП. Изменить их вручную нельзя.
+            {API_MODE === "api" ? "Реквизиты загружаются из базы сервиса. Для присоединения к существующей компании нужен код приглашения от её участника." : "Название, форму бизнеса, дату регистрации и ОКВЭД мы получаем из демонстрационного реестра."}
           </InfoBlock>
         </div>
       </div>

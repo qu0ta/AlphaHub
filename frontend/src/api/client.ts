@@ -131,8 +131,8 @@ export const companyApi = {
     try {
       return fromApiCompany(await request<ApiCompany>(`/company/by-inn/${encodeURIComponent(inn)}`, { token: token ?? undefined }));
     } catch (reason) {
-      // Backend ищет только в локальной БД. Demo-реестр временно имитирует внешний ЕГРЮЛ/ЕГРИП.
-      if (reason instanceof ApiError && reason.status === 404) return mockCompany.lookup(inn);
+      // В режиме API отсутствие компании нельзя подменять demo-записью.
+      if (reason instanceof ApiError && reason.status === 404) throw new ApiError(404, "Компания не найдена в базе сервиса");
       throw reason;
     }
   },
@@ -154,10 +154,27 @@ export const companyApi = {
       throw reason;
     }
   },
-  async save(token: string | null, company: Company): Promise<Company> {
+  async save(token: string | null, company: Company, invitationCode?: string): Promise<Company> {
     const userId = currentUserId(token);
     if (API_MODE === "mock") return mockCompany.save(userId, company);
     let saved = company;
+    if (company.id) {
+      let linked: ApiCompany | null = null;
+      try {
+        linked = await request<ApiCompany>("/company/me", { token: token ?? undefined });
+      } catch (reason) {
+        if (!(reason instanceof ApiError && reason.status === 404)) throw reason;
+      }
+      if (linked && linked.id !== company.id) throw new ApiError(409, "Вы уже привязаны к другой компании");
+      if (!linked) {
+        if (!invitationCode?.trim()) throw new ApiError(400, "Введите код приглашения от участника компании");
+        linked = await request<ApiCompany>("/company/join", {
+          method: "POST", token: token ?? undefined,
+          body: JSON.stringify({ code: invitationCode.trim() }),
+        });
+      }
+      saved = { ...fromApiCompany(linked), representativeName: company.representativeName, representativePosition: company.representativePosition, representativePositionOther: company.representativePositionOther };
+    }
     if (!company.id) {
       const row = await request<ApiCompany>("/company", {
         method: "POST",

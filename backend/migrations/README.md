@@ -1,5 +1,7 @@
 # Миграции кредитного процесса AlphaHub
 
+``docker compose --profile tools run --rm migrate up``
+
 Формат: golang-migrate/migrate v4, PostgreSQL. 13 версий, 26 SQL-файлов.
 SQL рассчитан на PostgreSQL 16 из compose.yaml. Каждая миграция обёрнута в BEGIN/COMMIT.
 Применение миграций из Go-кода и установка CLI этим набором файлов не добавляются.

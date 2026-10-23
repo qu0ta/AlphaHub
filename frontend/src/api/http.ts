@@ -13,8 +13,8 @@ export class ApiError extends Error {
   }
 }
 
-/** mock — данные из браузера (по умолчанию), api — настоящий бэкенд. */
-export const API_MODE: "mock" | "api" = import.meta.env.VITE_API_MODE === "api" ? "api" : "mock";
+/** api — настоящий бэкенд по умолчанию; mock включается явно. */
+export const API_MODE: "mock" | "api" = import.meta.env.VITE_API_MODE === "mock" ? "mock" : "api";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 
