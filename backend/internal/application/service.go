@@ -9,6 +9,8 @@ import (
 )
 
 var (
+	ErrFinancialsUnconfirmed = errors.New("confirm current financial data before submitting")
+	ErrInvalidScoringPeriod  = errors.New("invalid financial reporting period or scoring parameters")
 	ErrNotFound              = errors.New("application not found")
 	ErrInvalidInput          = errors.New("invalid application input")
 	ErrProductMissing        = errors.New("product not found or inactive")
@@ -19,6 +21,7 @@ var (
 )
 
 type Repository interface {
+	GetScoring(context.Context, string, string) (*ScoringResult, error)
 	Create(ctx context.Context, userID, productCode string) (*Application, error)
 	List(ctx context.Context, userID string) ([]Application, error)
 	GetByID(ctx context.Context, id, userID string) (*Application, error)
@@ -121,4 +124,14 @@ func (s *Service) Submit(ctx context.Context, id, userID string) (*Application, 
 		return nil, ErrInvalidInput
 	}
 	return s.repo.Submit(ctx, id, userID)
+}
+
+func (s *Service) GetScoring(ctx context.Context, id, userID string) (*ScoringResult, error) {
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, ErrInvalidInput
+	}
+	if _, err := uuid.Parse(userID); err != nil {
+		return nil, ErrInvalidInput
+	}
+	return s.repo.GetScoring(ctx, id, userID)
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/qu0ta/AlphaHub/internal/auth"
+	"github.com/qu0ta/AlphaHub/internal/dsclient"
 )
 
 type Handler struct {
@@ -20,7 +21,14 @@ func NewHandler(service *Service) *Handler {
 }
 
 func writeError(w http.ResponseWriter, err error) {
+	if dsclient.WriteHTTPError(w, err) {
+		return
+	}
 	switch {
+	case errors.Is(err, ErrVersionConflict):
+		http.Error(w, err.Error(), http.StatusConflict)
+	case errors.Is(err, ErrCompanyRequired), errors.Is(err, ErrINNMismatch):
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 	case errors.Is(err, ErrInvalidInput),
 		errors.Is(err, ErrInvalidPDF):
 		http.Error(w, err.Error(), http.StatusBadRequest)

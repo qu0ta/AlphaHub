@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/qu0ta/AlphaHub/internal/dsclient"
 )
 
 type PostgresRepository struct {
@@ -16,7 +18,7 @@ type PostgresRepository struct {
 func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
-func (r *PostgresRepository) Save(ctx context.Context, doc Document, userID string, storageKey string) (*Document, error) {
+func (r *PostgresRepository) Save(ctx context.Context, doc Document, userID string, storageKey string, expectedVersion int, extraction *dsclient.ExtractFinancialsResponse) (*Document, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin document tx: %w", err)
@@ -24,14 +26,16 @@ func (r *PostgresRepository) Save(ctx context.Context, doc Document, userID stri
 	defer tx.Rollback(ctx)
 
 	var status string
+	var version int
+	var inn *string
 
 	err = tx.QueryRow(ctx, `
-		SELECT status
-		FROM applications
-		WHERE id = $1
-		  AND created_by_user_id = $2
-		FOR UPDATE
-	`, doc.ApplicationID, userID).Scan(&status)
+		SELECT a.status, a.data_version, c.inn
+ FROM applications a LEFT JOIN companies c ON c.id = a.company_id
+		WHERE a.id = $1
+ AND a.created_by_user_id = $2
+ FOR UPDATE OF a
+	`, doc.ApplicationID, userID).Scan(&status, &version, &inn)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -41,6 +45,16 @@ func (r *PostgresRepository) Save(ctx context.Context, doc Document, userID stri
 	}
 	if status != "DRAFT" {
 		return nil, ErrNotDraft
+	}
+
+	if version != expectedVersion {
+		return nil, ErrVersionConflict
+	}
+	if inn == nil {
+		return nil, ErrCompanyRequired
+	}
+	if *inn != extraction.INN {
+		return nil, ErrINNMismatch
 	}
 
 	err = tx.QueryRow(ctx, `
@@ -69,6 +83,25 @@ func (r *PostgresRepository) Save(ctx context.Context, doc Document, userID stri
 		return nil, fmt.Errorf("insert document: %w", err)
 	}
 
+	newVersion := version + 1
+	for _, month := range extraction.Financials {
+		_, err = tx.Exec(ctx, `INSERT INTO financial_records
+   (id, application_id, source_document_id, data_version, period_month,
+    revenue_kopecks, operating_inflow_kopecks, operating_outflow_kopecks, tax_outflow_kopecks,
+    operating_expenses_kopecks, existing_debt_payment_kopecks)
+   VALUES ($1,$2,$3,$4,$5::date,$6,$7,$8,$9,NULL,NULL)`,
+			uuid.NewString(), doc.ApplicationID, doc.ID, newVersion, month.PeriodMonth+"-01",
+			month.RevenueKopecks, month.OperatingInflowKopecks, month.OperatingOutflowKopecks, month.TaxOutflowKopecks)
+		if err != nil {
+			return nil, fmt.Errorf("save extracted month: %w", err)
+		}
+	}
+	_, err = tx.Exec(ctx, `UPDATE applications SET data_version=$2,
+ declared_monthly_debt_payment_kopecks=$3, updated_at=now() WHERE id=$1`,
+		doc.ApplicationID, newVersion, extraction.DeclaredMonthlyDebtPaymentKopecks)
+	if err != nil {
+		return nil, fmt.Errorf("save extracted debt: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit document: %w", err)
 	}
@@ -137,4 +170,28 @@ func (r *PostgresRepository) List(ctx context.Context, applicationID string, use
 	}
 
 	return result, nil
+}
+
+// Check ownership before sending any document to DS. Save rechecks under a lock.
+func (r *PostgresRepository) PrepareUpload(ctx context.Context, applicationID, userID string) (*UploadContext, error) {
+	var result UploadContext
+	var status string
+	var inn *string
+	err := r.pool.QueryRow(ctx, `SELECT a.status, a.data_version, c.inn
+ FROM applications a LEFT JOIN companies c ON c.id=a.company_id
+ WHERE a.id=$1 AND a.created_by_user_id=$2`, applicationID, userID).Scan(&status, &result.Version, &inn)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("prepare PDF upload: %w", err)
+	}
+	if status != "DRAFT" {
+		return nil, ErrNotDraft
+	}
+	if inn == nil {
+		return nil, ErrCompanyRequired
+	}
+	result.INN = *inn
+	return &result, nil
 }

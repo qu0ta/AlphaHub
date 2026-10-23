@@ -2,21 +2,30 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/qu0ta/AlphaHub/internal/dsclient"
 )
 
 type PostgresRepository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	scorer Scorer
 }
 
-func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
+type Scorer interface {
+	EvaluateScoring(context.Context, dsclient.ScoringInput) (*dsclient.ScoringResponse, error)
+}
+
+func NewPostgresRepository(pool *pgxpool.Pool, scorer Scorer) *PostgresRepository {
 	return &PostgresRepository{
-		pool: pool,
+		pool:   pool,
+		scorer: scorer,
 	}
 }
 
@@ -296,16 +305,24 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 		return nil, ErrIncompleteApplication
 	}
 
+	submittedAt := time.Now().UTC()
+	if current.SubmittedAt != nil {
+		submittedAt = *current.SubmittedAt
+	}
+	if err := r.scoreSubmission(ctx, tx, current, submittedAt); err != nil {
+		return nil, err
+	}
+
 	const updateQuery = `
 		UPDATE applications
 		SET	status = 'SUBMITTED',
-			submitted_at = now(),
+			submitted_at = $3,
 			updated_at = now()
 		WHERE id = $1
 		  AND created_by_user_id = $2
 		  AND status = 'DRAFT'
 		RETURNING ` + applicationColumns
-	submitted, err := scanApplication(tx.QueryRow(ctx, updateQuery, id, userID))
+	submitted, err := scanApplication(tx.QueryRow(ctx, updateQuery, id, userID, submittedAt))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotDraft
 	}
@@ -341,4 +358,89 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 	}
 
 	return submitted, nil
+}
+
+// The draft lock keeps the confirmed financial version and the scoring snapshot consistent.
+// DS is bounded by its HTTP timeout; failure rolls back submission and its score together.
+func (r *PostgresRepository) scoreSubmission(ctx context.Context, tx pgx.Tx, app *Application, submittedAt time.Time) error {
+	input := dsclient.ScoringInput{
+		AmountKopecks:   *app.RequestedAmountKopecks,
+		TermMonths:      *app.RequestedTermMonths,
+		ApplicationDate: submittedAt.Format("2006-01-02"),
+	}
+	var debt *int64
+	err := tx.QueryRow(ctx, `SELECT c.inn, p.base_annual_rate_bps, a.declared_monthly_debt_payment_kopecks
+ FROM applications a JOIN companies c ON c.id=a.company_id JOIN products p ON p.code=a.product_code
+ WHERE a.id=$1`, app.ID).Scan(&input.INN, &input.AnnualRateBps, &debt)
+	if err != nil {
+		return fmt.Errorf("load scoring parameters: %w", err)
+	}
+	if debt == nil {
+		return ErrFinancialsUnconfirmed
+	}
+	input.DeclaredMonthlyDebtPaymentKopecks = *debt
+	rows, err := tx.Query(ctx, `SELECT to_char(period_month,'YYYY-MM'), revenue_kopecks,
+ operating_inflow_kopecks, operating_outflow_kopecks, tax_outflow_kopecks, confirmed_at IS NOT NULL
+ FROM financial_records WHERE application_id=$1 AND data_version=$2 ORDER BY period_month`, app.ID, app.DataVersion)
+	if err != nil {
+		return fmt.Errorf("load scoring financials: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m dsclient.MonthlyFinancials
+		var confirmed bool
+		if err := rows.Scan(&m.PeriodMonth, &m.RevenueKopecks, &m.OperatingInflowKopecks, &m.OperatingOutflowKopecks, &m.TaxOutflowKopecks, &confirmed); err != nil {
+			return err
+		}
+		if !confirmed {
+			return ErrFinancialsUnconfirmed
+		}
+		input.Financials = append(input.Financials, m)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if len(input.Financials) != 6 {
+		return ErrFinancialsUnconfirmed
+	}
+	if err := input.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidScoringPeriod, err)
+	}
+	result, err := r.scorer.EvaluateScoring(ctx, input)
+	if err != nil {
+		return err
+	}
+	snapshot, err := json.Marshal(input)
+	if err != nil {
+		return err
+	}
+	explanation, err := json.Marshal(result.Explanation)
+	if err != nil {
+		return err
+	}
+	// A financial score is not a bank decision or an assessed bank risk band.
+	_, err = tx.Exec(ctx, `INSERT INTO scoring_results
+ (id,application_id,data_version,score,risk_band,model_version,features_snapshot,explanation)
+ VALUES ($1,$2,$3,$4,'UNASSESSED',$5,$6,$7)`, uuid.NewString(), app.ID, app.DataVersion,
+		result.Score, result.ModelVersion, snapshot, explanation)
+	if err != nil {
+		return fmt.Errorf("save scoring result: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) GetScoring(ctx context.Context, id, userID string) (*ScoringResult, error) {
+	var result ScoringResult
+	err := r.pool.QueryRow(ctx, `SELECT s.data_version,s.score,s.model_version,s.explanation,s.features_snapshot,s.created_at
+ FROM scoring_results s JOIN applications a ON a.id=s.application_id
+ WHERE a.id=$1 AND a.created_by_user_id=$2 ORDER BY s.created_at DESC,s.id DESC LIMIT 1`, id, userID).Scan(
+		&result.DataVersion, &result.Score, &result.ModelVersion, &result.Explanation, &result.FeaturesSnapshot, &result.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read scoring: %w", err)
+	}
+	return &result, nil
 }

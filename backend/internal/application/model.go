@@ -1,6 +1,9 @@
 package application
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Application struct {
 	ID                     string     `json:"id"`
@@ -32,4 +35,13 @@ type UpdateRequest struct {
 	RequestedTermMonths    *int    `json:"requested_term_months,omitempty"`
 	Purpose                *string `json:"purpose,omitempty"`
 	DataVersion            *int    `json:"data_version"`
+}
+
+type ScoringResult struct {
+	DataVersion      int             `json:"data_version"`
+	Score            int             `json:"score"`
+	ModelVersion     string          `json:"model_version"`
+	Explanation      json.RawMessage `json:"explanation"`
+	FeaturesSnapshot json.RawMessage `json:"features_snapshot"`
+	CreatedAt        time.Time       `json:"created_at"`
 }

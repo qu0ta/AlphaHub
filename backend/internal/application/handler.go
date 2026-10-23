@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/qu0ta/AlphaHub/internal/auth"
+	"github.com/qu0ta/AlphaHub/internal/dsclient"
 )
 
 type Handler struct {
@@ -46,7 +47,12 @@ func userIDFromRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func writeServiceError(w http.ResponseWriter, err error) {
+	if dsclient.WriteHTTPError(w, err) {
+		return
+	}
 	switch {
+	case errors.Is(err, ErrFinancialsUnconfirmed), errors.Is(err, ErrInvalidScoringPeriod):
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 	case errors.Is(err, ErrInvalidInput):
 		http.Error(w, "Invalid application input", http.StatusBadRequest)
 
@@ -156,4 +162,17 @@ func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, app)
+}
+
+func (h *Handler) GetScoring(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.service.GetScoring(r.Context(), r.PathValue("id"), userID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }

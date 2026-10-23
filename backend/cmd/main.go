@@ -39,8 +39,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Init DS client: %v", err)
 	}
-	_ = dsClient
-
 	mux := http.NewServeMux()
 
 	authRepo := auth.NewPostgresRepository(pool)
@@ -67,7 +65,7 @@ func main() {
 	mux.HandleFunc("GET /api/v1/products", productHandler.GetAll)
 	mux.HandleFunc("GET /api/v1/products/{code}", productHandler.GetByCode)
 
-	applicationRepo := application.NewPostgresRepository(pool)
+	applicationRepo := application.NewPostgresRepository(pool, dsClient)
 	applicationService := application.NewService(applicationRepo)
 	applicationHandler := application.NewHandler(applicationService)
 
@@ -91,6 +89,8 @@ func main() {
 		"POST /api/v1/applications/{id}/submit",
 		clientOnly(applicationHandler.Submit),
 	)
+
+	mux.Handle("GET /api/v1/applications/{id}/scoring", clientOnly(applicationHandler.GetScoring))
 
 	companyRepo := company.NewRepository(pool)
 	companyService := company.NewService(companyRepo)
@@ -124,6 +124,7 @@ func main() {
 	documentService := documents.NewService(
 		documentRepo,
 		documentStorage,
+		dsClient,
 	)
 	documentHandler := documents.NewHandler(documentService)
 
