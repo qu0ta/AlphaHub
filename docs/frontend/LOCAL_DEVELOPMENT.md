@@ -16,22 +16,23 @@ Compose поднимает только PostgreSQL 16, не backend.
 С хоста подключение localhost:5433, внутри контейнера порт 5432.
 Данные сохраняются в volume postgres_data.
 
-## Миграция
+## Миграции
 
-Автоматического применения нет. Дождитесь готовности БД, на новой базе выполните один раз:
+Автоматического применения при старте API нет. Дождитесь готовности PostgreSQL.
+Используйте CLI golang-migrate v4 и инструкции
+[backend/migrations/README.md](../../backend/migrations/README.md).
 
-~~~powershell
-Get-Content -Raw -Encoding UTF8 backend/migrations/001_create_users.sql |
-  docker compose exec -T postgres psql -U alphahub -d alphahub -v ON_ERROR_STOP=1
-~~~
-
-Миграция не идемпотентна: повторное выполнение сообщает о существующей таблице.
-Не удаляйте volume для устранения этой ошибки. Проверить схему:
+Из корня проекта, PowerShell, при заданной DATABASE_URL в окружении:
 
 ~~~powershell
-docker compose exec -T postgres psql -U alphahub -d alphahub -c '\d users'
+migrate -path ./backend/migrations -database $env:DATABASE_URL up
+migrate -path ./backend/migrations -database $env:DATABASE_URL version
 ~~~
 
+CLI сам не читает backend/.env. Итоговая версия схемы — 13.
+Если users уже создана прежним SQL, сначала выполните процедуру проверки и регистрации
+исходной версии из инструкции миграций. Не удаляйте данные и не используйте force вслепую.
+Таблицы кредитного процесса созданы миграциями; HTTP API для них пока не реализован.
 ## Окружение
 
 .env читается относительно текущего каталога; запускайте из backend.

@@ -3,7 +3,7 @@
 Сверено с исходниками backend 20.10.2026. Описывает текущую реализацию.
 Runtime-проверка с PostgreSQL при подготовке этих документов не проводилась.
 
-- [Полный контракт API](API.md): запросы, ответы, ошибки, примеры.
+- [Полный контракт API](AlphaHub_API_contract.md): запросы, ответы, ошибки, примеры.
 - [Авторизация и UI](AUTH.md): JWT, роли, сессия, выход.
 - [TypeScript-интеграция](INTEGRATION.md): типы, fetch, Vite proxy.
 - [Локальный запуск](LOCAL_DEVELOPMENT.md): БД, миграция, окружение и smoke test.
@@ -20,10 +20,19 @@ Production URL не задан кодом. Префикс API: /api/v1.
 Регистрация не выдаёт токен: после неё нужен login, затем me.
 Успех — JSON без обёртки data, ошибки — обычный текст.
 
-API заявок, компаний, документов, предложений, списков пользователей и редактирования профиля нет.
+API заявок, компаний, документов и финансов реализованы; см. отдельные контракты ниже. API предложений, списков пользователей и редактирования профиля нет.
 Нет refresh/logout, восстановления пароля, подтверждения email, пагинации, фильтров, сортировки,
-загрузки файлов, WebSocket и SSE. Функция Health есть, но /health не подключён к маршрутизатору.
+WebSocket и SSE. Функция Health есть, но /health не подключён к маршрутизатору.
 
 Источники истины: backend/cmd/main.go; backend/internal/auth/{handler,model,service,repository}.go;
-backend/internal/platform/db/postgres.go; backend/migrations/001_create_users.sql; compose.yaml.
+backend/internal/platform/db/postgres.go; backend/migrations/README.md; compose.yaml.
 Рекомендации для UI не означают, что такой frontend уже написан.
+
+## Контракты модулей
+
+- [Заявки](applications_API.md)
+- [Компании](companies_API.md)
+- [Документы: загрузка PDF и список](documents_API.md)
+- [Финансы: получение, сохранение и подтверждение](financials_API.md)
+
+Отдельные контракты модулей уточняют актуальное поведение новых маршрутов; общий контракт выше содержит более раннее описание базового API.

@@ -52,6 +52,13 @@ class ScoringInput(BaseModel):
     amount_kopecks: int = Field(gt=0)
     term_months: int = Field(gt=0)
 
+    # Ставка оцениваемого кредита: 1990 = 19.90% годовых.
+    annual_rate_bps: int = Field(ge=0, strict=True)
+
+    # Дата первоначальной подачи, передаётся бэком как YYYY-MM-DD.
+    # При повторном расчёте сохраняется; не подменяется текущей датой.
+    application_date: date = Field(ge=date(1, 7, 1))
+
     # Финансовые данные
     financials: list[MonthlyFinancials] = Field(
         min_length=6,
@@ -62,7 +69,7 @@ class ScoringInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_financials(self):
-        expected = get_last_six_months(date.today())
+        expected = get_last_six_months(self.application_date)
 
         actual = [
             record.period_month
@@ -71,7 +78,7 @@ class ScoringInput(BaseModel):
 
         if actual != expected:
             raise ValueError(
-                "Ожидаются последние 6 полных месяцев: "
+                "Ожидаются 6 полных месяцев перед датой подачи, по порядку: "
                 + ", ".join(expected)
             )
 
@@ -96,3 +103,15 @@ class ScoringResponse(BaseModel):
     score: int = Field(ge=0, le=100)
     explanation: ScoringExplanation
     model_version: str
+
+
+class ScoreComponents(BaseModel):
+    coverage_points: int = Field(ge=0, le=60)
+    stability_points: int = Field(ge=0, le=20)
+    growth_points: int = Field(ge=0, le=20)
+
+
+class DetailedScoringResponse(ScoringResponse):
+    components: ScoreComponents
+    raw_score: int = Field(ge=0, le=100)
+    score_cap: int | None = Field(default=None, ge=0, le=100)

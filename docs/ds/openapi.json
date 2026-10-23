@@ -1,0 +1,419 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AlphaHub Go-DS contract",
+    "version": "1.0.0",
+    "description": "Agreed 2026-10-22. Synchronous Go -> FastAPI API; changes require coordination."
+  },
+  "paths": {
+    "/api/v1/financials/extract": {
+      "post": {
+        "operationId": "extractFinancials",
+        "summary": "Extract six financial months from a PDF",
+        "requestBody": {
+          "required": true,
+          "description": "PDF payload <= 10485760 bytes, excluding multipart overhead.",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Extracted financials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialExtractionResponse"
+                },
+                "example": {
+                  "inn": "7707083893",
+                  "financials": [
+                    {
+                      "period_month": "2026-04",
+                      "revenue_kopecks": 15000000,
+                      "operating_inflow_kopecks": 14000000,
+                      "operating_outflow_kopecks": 9000000,
+                      "tax_outflow_kopecks": 1000000
+                    },
+                    {
+                      "period_month": "2026-05",
+                      "revenue_kopecks": 15000000,
+                      "operating_inflow_kopecks": 14000000,
+                      "operating_outflow_kopecks": 9000000,
+                      "tax_outflow_kopecks": 1000000
+                    },
+                    {
+                      "period_month": "2026-06",
+                      "revenue_kopecks": 15000000,
+                      "operating_inflow_kopecks": 14000000,
+                      "operating_outflow_kopecks": 9000000,
+                      "tax_outflow_kopecks": 1000000
+                    },
+                    {
+                      "period_month": "2026-07",
+                      "revenue_kopecks": 15000000,
+                      "operating_inflow_kopecks": 14000000,
+                      "operating_outflow_kopecks": 9000000,
+                      "tax_outflow_kopecks": 1000000
+                    },
+                    {
+                      "period_month": "2026-08",
+                      "revenue_kopecks": 15000000,
+                      "operating_inflow_kopecks": 14000000,
+                      "operating_outflow_kopecks": 9000000,
+                      "tax_outflow_kopecks": 1000000
+                    },
+                    {
+                      "period_month": "2026-09",
+                      "revenue_kopecks": 15000000,
+                      "operating_inflow_kopecks": 14000000,
+                      "operating_outflow_kopecks": 9000000,
+                      "tax_outflow_kopecks": 1000000
+                    }
+                  ],
+                  "declared_monthly_debt_payment_kopecks": 2000000
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid PDF or extraction failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_PDF",
+                    "message": "Unable to extract financials"
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PDF exceeds 10485760 bytes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal DS service error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scoring/evaluate": {
+      "post": {
+        "operationId": "evaluateScoring",
+        "summary": "Evaluate confirmed financials",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoringInput"
+              },
+              "example": {
+                "inn": "7707083893",
+                "financials": [
+                  {
+                    "period_month": "2026-04",
+                    "revenue_kopecks": 15000000,
+                    "operating_inflow_kopecks": 14000000,
+                    "operating_outflow_kopecks": 9000000,
+                    "tax_outflow_kopecks": 1000000
+                  },
+                  {
+                    "period_month": "2026-05",
+                    "revenue_kopecks": 15000000,
+                    "operating_inflow_kopecks": 14000000,
+                    "operating_outflow_kopecks": 9000000,
+                    "tax_outflow_kopecks": 1000000
+                  },
+                  {
+                    "period_month": "2026-06",
+                    "revenue_kopecks": 15000000,
+                    "operating_inflow_kopecks": 14000000,
+                    "operating_outflow_kopecks": 9000000,
+                    "tax_outflow_kopecks": 1000000
+                  },
+                  {
+                    "period_month": "2026-07",
+                    "revenue_kopecks": 15000000,
+                    "operating_inflow_kopecks": 14000000,
+                    "operating_outflow_kopecks": 9000000,
+                    "tax_outflow_kopecks": 1000000
+                  },
+                  {
+                    "period_month": "2026-08",
+                    "revenue_kopecks": 15000000,
+                    "operating_inflow_kopecks": 14000000,
+                    "operating_outflow_kopecks": 9000000,
+                    "tax_outflow_kopecks": 1000000
+                  },
+                  {
+                    "period_month": "2026-09",
+                    "revenue_kopecks": 15000000,
+                    "operating_inflow_kopecks": 14000000,
+                    "operating_outflow_kopecks": 9000000,
+                    "tax_outflow_kopecks": 1000000
+                  }
+                ],
+                "declared_monthly_debt_payment_kopecks": 2000000,
+                "amount_kopecks": 50000000,
+                "term_months": 12
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Score and explanation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoringResponse"
+                },
+                "example": {
+                  "score": 65,
+                  "explanation": {
+                    "positive_factors": [
+                      "Стабильная выручка"
+                    ],
+                    "negative_factors": [
+                      "Высокая долговая нагрузка"
+                    ]
+                  },
+                  "model_version": "rules-v1"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid scoring JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal DS service error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "MonthlyFinancials": {
+        "type": "object",
+        "required": [
+          "period_month",
+          "revenue_kopecks",
+          "operating_inflow_kopecks",
+          "operating_outflow_kopecks",
+          "tax_outflow_kopecks"
+        ],
+        "properties": {
+          "period_month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+            "example": "2026-09"
+          },
+          "revenue_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "operating_inflow_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "operating_outflow_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "tax_outflow_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "FinancialExtractionResponse": {
+        "type": "object",
+        "required": [
+          "inn",
+          "financials",
+          "declared_monthly_debt_payment_kopecks"
+        ],
+        "properties": {
+          "inn": {
+            "type": "string",
+            "minLength": 1
+          },
+          "financials": {
+            "type": "array",
+            "minItems": 6,
+            "maxItems": 6,
+            "items": {
+              "$ref": "#/components/schemas/MonthlyFinancials"
+            },
+            "description": "Six distinct reporting months. Month uniqueness is validated by the application."
+          },
+          "declared_monthly_debt_payment_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ScoringInput": {
+        "type": "object",
+        "required": [
+          "inn",
+          "amount_kopecks",
+          "term_months",
+          "financials",
+          "declared_monthly_debt_payment_kopecks"
+        ],
+        "properties": {
+          "inn": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "term_months": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "financials": {
+            "type": "array",
+            "minItems": 6,
+            "maxItems": 6,
+            "items": {
+              "$ref": "#/components/schemas/MonthlyFinancials"
+            },
+            "description": "Six distinct reporting months. Month uniqueness is validated by the application."
+          },
+          "declared_monthly_debt_payment_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ScoringExplanation": {
+        "type": "object",
+        "required": [
+          "positive_factors",
+          "negative_factors"
+        ],
+        "properties": {
+          "positive_factors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "negative_factors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ScoringResponse": {
+        "type": "object",
+        "required": [
+          "score",
+          "explanation",
+          "model_version"
+        ],
+        "properties": {
+          "score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "explanation": {
+            "$ref": "#/components/schemas/ScoringExplanation"
+          },
+          "model_version": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

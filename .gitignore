@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 .venv/
 .venv-docling/
 .venv-old/
@@ -13,3 +14,100 @@ __pycache__/
 
 
 .DS_Store
+=======
+# =========================
+# IDE / Editors
+# =========================
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# =========================
+# Go
+# =========================
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage/
+coverage.txt
+coverage.out
+vendor/
+
+# =========================
+# React / Node.js
+# =========================
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+.next/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Python / FastAPI
+# =========================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Logs / Temp
+# =========================
+*.log
+tmp/
+temp/
+*.tmp
+*.bak
+
+# =========================
+# Local Database / Docker
+# =========================
+*.sqlite
+*.sqlite3
+postgres_data/
+pgdata/
+
+# =========================
+# Local Uploaded Documents
+# =========================
+uploads/
+storage/
+frontend/vite.config.js
+frontend/vite.config.d.ts
+>>>>>>> origin/main
