@@ -17,7 +17,6 @@ type FinancialExtractionResponse struct {
 }
 
 type ExtractFinancialsResponse = FinancialExtractionResponse
-
 type ScoringInput struct {
 	INN                               string              `json:"inn"`
 	AmountKopecks                     int64               `json:"amount_kopecks"`

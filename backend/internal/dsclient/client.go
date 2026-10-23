@@ -81,11 +81,8 @@ func (c *Client) ExtractFinancials(ctx context.Context, filename string, pdf []b
 	return decodeFinancialExtraction(data)
 
 }
+func (c *Client) EvaluateScoring(ctx context.Context, input ScoringInput) (*ScoringResponse, error) {
 
-func (c *Client) EvaluateScoring(
-	ctx context.Context,
-	input ScoringInput,
-) (*ScoringResponse, error) {
 	if err := input.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid scoring input: %w", err)
 	}
@@ -133,28 +130,54 @@ func (c *Client) send(req *http.Request) (json.RawMessage, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var envelope struct {
-			Error struct {
-				Code    string `json:"code"`
-				Message string `json:"message"`
-			} `json:"error"`
+		dsErr := &DSError{
+			StatusCode: resp.StatusCode,
+			Code:       "INVALID_ERROR_RESPONSE",
+			Message:    "DS returned an unexpected error format",
 		}
 
-		if err := json.Unmarshal(body, &envelope); err != nil ||
-			envelope.Error.Code == "" ||
-			envelope.Error.Message == "" {
-			return nil, &DSError{
-				StatusCode: resp.StatusCode,
-				Code:       "INVALID_ERROR_RESPONSE",
-				Message:    "DS returned an unexpected error format",
+		var envelope struct {
+			Detail json.RawMessage `json:"detail"`
+			Error  json.RawMessage `json:"error"`
+		}
+
+		if err := json.Unmarshal(body, &envelope); err != nil {
+			return nil, dsErr
+		}
+
+		// Поддерживаем FastAPI detail и прежний формат error.
+		for _, raw := range []json.RawMessage{
+			envelope.Detail,
+			envelope.Error,
+		} {
+			var detail struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			}
+
+			if err := json.Unmarshal(raw, &detail); err == nil &&
+				detail.Code != "" &&
+				detail.Message != "" {
+				dsErr.Code = detail.Code
+				dsErr.Message = detail.Message
+				return nil, dsErr
 			}
 		}
 
-		return nil, &DSError{
-			StatusCode: resp.StatusCode,
-			Code:       envelope.Error.Code,
-			Message:    envelope.Error.Message,
+		// Ошибки проверки входных полей FastAPI возвращает массивом.
+		if resp.StatusCode == http.StatusUnprocessableEntity {
+			var validationErrors []json.RawMessage
+
+			if err := json.Unmarshal(
+				envelope.Detail,
+				&validationErrors,
+			); err == nil && len(validationErrors) > 0 {
+				dsErr.Code = "VALIDATION_ERROR"
+				dsErr.Message = "DS rejected scoring input"
+			}
 		}
+
+		return nil, dsErr
 	}
 
 	if !json.Valid(body) {
