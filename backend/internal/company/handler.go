@@ -66,6 +66,12 @@ func writeServiceError(w http.ResponseWriter, err error) {
 			"User not found",
 			http.StatusNotFound,
 		)
+	case errors.Is(err, ErrInvalidInvitation):
+		http.Error(
+			w,
+			"Invalid or expired invitation",
+			http.StatusBadRequest,
+		)
 
 	default:
 		log.Printf("company error: %v", err)
@@ -91,16 +97,17 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created, err := h.service.Create(r.Context(), user.ID, req)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
 	_ = json.NewEncoder(w).Encode(toResponse(created))
 }
-
-func (h *Handler) GetMe(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -115,4 +122,71 @@ func (h *Handler) GetMe(
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(toResponse(c))
+}
+func (h *Handler) GetByINN(w http.ResponseWriter, r *http.Request) {
+	inn := r.PathValue("inn")
+
+	company, err := h.service.GetByINN(
+		r.Context(),
+		inn,
+	)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(toResponse(company)); err != nil {
+		log.Printf("encode company response: %v", err)
+	}
+}
+func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	invitation, err := h.service.CreateInvitation(
+		r.Context(),
+		user.ID,
+	)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusCreated)
+
+	_ = json.NewEncoder(w).Encode(invitation)
+}
+
+func (h *Handler) Join(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req JoinRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	joinedCompany, err := h.service.JoinByInvitation(
+		r.Context(),
+		user.ID,
+		req.Code,
+	)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(toResponse(joinedCompany))
 }

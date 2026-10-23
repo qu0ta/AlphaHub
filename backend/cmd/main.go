@@ -102,6 +102,20 @@ func main() {
 		"GET /api/v1/companies/me",
 		clientOnly(companyHandler.GetMe),
 	)
+	mux.Handle(
+		"GET /api/v1/companies/by-inn/{inn}",
+		clientOnly(companyHandler.GetByINN),
+	)
+
+	mux.Handle(
+		"POST /api/v1/companies/invitations",
+		clientOnly(companyHandler.CreateInvitation),
+	)
+
+	mux.Handle(
+		"POST /api/v1/companies/join",
+		clientOnly(companyHandler.Join),
+	)
 	//mux.Handle(
 	//	"GET /api/v1/client/test",
 	//	authHandler.RequireAuth(
