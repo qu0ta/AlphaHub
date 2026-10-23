@@ -11,6 +11,7 @@ import (
 	"github.com/qu0ta/AlphaHub/internal/application"
 	"github.com/qu0ta/AlphaHub/internal/auth"
 	"github.com/qu0ta/AlphaHub/internal/company"
+	"github.com/qu0ta/AlphaHub/internal/documents"
 	"github.com/qu0ta/AlphaHub/internal/platform/db"
 	"github.com/qu0ta/AlphaHub/internal/product"
 )
@@ -115,6 +116,23 @@ func main() {
 	mux.Handle(
 		"POST /api/v1/companies/join",
 		clientOnly(companyHandler.Join),
+	)
+	documentRepo := documents.NewRepository(pool)
+	documentStorage := documents.NewLocalStorage("uploads")
+	documentService := documents.NewService(
+		documentRepo,
+		documentStorage,
+	)
+	documentHandler := documents.NewHandler(documentService)
+
+	mux.Handle(
+		"POST /api/v1/applications/{id}/documents",
+		clientOnly(documentHandler.Upload),
+	)
+
+	mux.Handle(
+		"GET /api/v1/applications/{id}/documents",
+		clientOnly(documentHandler.List),
 	)
 	//mux.Handle(
 	//	"GET /api/v1/client/test",
