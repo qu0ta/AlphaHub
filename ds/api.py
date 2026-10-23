@@ -124,3 +124,8 @@ def evaluate_scoring(data: ScoringInput) -> ScoringResponse:
                 "message": "Внутренняя ошибка расчёта скоринга",
             },
         ) from exc
+
+#для парсера
+from financials_api import router as financials_router
+
+app.include_router(financials_router)

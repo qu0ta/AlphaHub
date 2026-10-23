@@ -1,3 +1,20 @@
+<<<<<<< HEAD
+.venv/
+.venv-docling/
+.venv-old/
+
+__pycache__/
+*.pyc
+
+
+/ds/docling_output/
+
+
+/ds/real_pdf_samples/
+
+
+.DS_Store
+=======
 # =========================
 # IDE / Editors
 # =========================
@@ -93,3 +110,4 @@ uploads/
 storage/
 frontend/vite.config.js
 frontend/vite.config.d.ts
+>>>>>>> origin/main
