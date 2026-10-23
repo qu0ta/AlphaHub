@@ -38,3 +38,12 @@ func toResponse(c *Company) Response {
 		MainOKVED:        c.MainOKVED,
 	}
 }
+
+type InvitationResponse struct {
+	Code      string    `json:"code"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type JoinRequest struct {
+	Code string `json:"code"`
+}

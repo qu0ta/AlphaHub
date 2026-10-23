@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/qu0ta/AlphaHub/internal/application"
 	"github.com/qu0ta/AlphaHub/internal/auth"
+	"github.com/qu0ta/AlphaHub/internal/company"
 	"github.com/qu0ta/AlphaHub/internal/platform/db"
 	"github.com/qu0ta/AlphaHub/internal/product"
 )
@@ -86,6 +87,34 @@ func main() {
 	mux.Handle(
 		"POST /api/v1/applications/{id}/submit",
 		clientOnly(applicationHandler.Submit),
+	)
+
+	companyRepo := company.NewRepository(pool)
+	companyService := company.NewService(companyRepo)
+	companyHandler := company.NewHandler(companyService)
+
+	mux.Handle(
+		"POST /api/v1/companies",
+		clientOnly(companyHandler.Create),
+	)
+
+	mux.Handle(
+		"GET /api/v1/companies/me",
+		clientOnly(companyHandler.GetMe),
+	)
+	mux.Handle(
+		"GET /api/v1/companies/by-inn/{inn}",
+		clientOnly(companyHandler.GetByINN),
+	)
+
+	mux.Handle(
+		"POST /api/v1/companies/invitations",
+		clientOnly(companyHandler.CreateInvitation),
+	)
+
+	mux.Handle(
+		"POST /api/v1/companies/join",
+		clientOnly(companyHandler.Join),
 	)
 	//mux.Handle(
 	//	"GET /api/v1/client/test",
