@@ -83,7 +83,12 @@ func (r *PostgresRepository) CreateForUser(ctx context.Context, userID string, c
 		return nil, fmt.Errorf("insert company: %w", err)
 	}
 
-	result, err := tx.Exec(ctx, `UPDATE users SET company_id = $1 WHERE id = $2 AND company_id IS NULL`)
+	result, err := tx.Exec(ctx, `
+    UPDATE users
+    SET company_id = $1
+    WHERE id = $2
+      AND company_id IS NULL
+`, created.ID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("link company to user: %w", err)
 	}
