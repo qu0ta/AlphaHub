@@ -4,7 +4,7 @@ import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-
 import { applicationsApi } from "../../../api/client";
 import { Page } from "../../../components/layout/Page";
 import { Button } from "../../../components/ui/Button";
-import { Card, StateMessage } from "../../../components/ui/Card";
+import { Alert, Card, StateMessage } from "../../../components/ui/Card";
 import { Stepper } from "../../../components/ui/Stepper";
 import { useResource } from "../../../hooks/useResource";
 import { useAuth } from "../../../state/auth";
@@ -29,6 +29,7 @@ export function ApplicationWizard() {
   const [params, setParams] = useSearchParams();
   const step = Math.min(4, Math.max(1, Number(params.get("step")) || 1));
   const [showErrors, setShowErrors] = useState(false);
+  const [integrationError, setIntegrationError] = useState("");
 
   const loaded = useResource(() => applicationsApi.get(token, id), [token, id]);
   const { products } = useProducts();
@@ -84,7 +85,18 @@ export function ApplicationWizard() {
       setShowErrors(true);
       return;
     }
-    await goTo(step + 1);
+    setIntegrationError("");
+    try {
+      if (step === 3 && app.financials && app.debtPayment !== null) {
+        await flush();
+        const saved = await applicationsApi.saveFinancials(token, app.id, app.debtPayment, app.financials);
+        const confirmed = await applicationsApi.confirmFinancials(token, app.id);
+        setApp((current) => (current ? { ...current, ...saved, ...confirmed } : current));
+      }
+      await goTo(step + 1);
+    } catch (reason) {
+      setIntegrationError(reason instanceof Error ? reason.message : "Не удалось сохранить данные на сервере");
+    }
   };
 
   return (
@@ -110,6 +122,7 @@ export function ApplicationWizard() {
       }
     >
       <Stepper steps={STEPS} current={step} onSelect={(target) => void goTo(target)} />
+      {integrationError && <Alert>{integrationError}</Alert>}
 
       {step === 1 && <StepCompany app={app} onNext={() => void goTo(2)} />}
       {step === 2 && product && <StepCredit app={app} product={product} showErrors={showErrors} onChange={change} onBack={() => void goTo(1)} onNext={() => void proceed()} />}

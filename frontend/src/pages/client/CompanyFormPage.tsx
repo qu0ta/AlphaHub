@@ -66,10 +66,10 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
     if (!company) return;
     setInn(company.inn);
     setLookup({ state: "found", company });
-    setName(company.representativeName);
+    setName(company.representativeName || user?.name || "");
     setPosition(company.representativePosition);
     setPositionOther(company.representativePositionOther);
-  }, [existing.data]);
+  }, [existing.data, user?.name]);
 
   const runLookup = async (value: string) => {
     const error = innError(value);
@@ -80,7 +80,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
     const id = ++lookupId.current;
     setLookup({ state: "loading" });
     try {
-      const company = await companyApi.lookup(value);
+      const company = await companyApi.lookup(value, token);
       if (id === lookupId.current) setLookup({ state: "found", company });
     } catch (reason) {
       if (id !== lookupId.current) return;
@@ -160,7 +160,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
             <LookupResult lookup={lookup} tooYoung={tooYoung} onRetry={() => void runLookup(inn)} />
 
             <div className="form-grid">
-              <TextField label="ФИО представителя" autoComplete="name" value={name} error={nameError} onChange={(event) => setName(event.target.value)} />
+              <TextField label="ФИО представителя" autoComplete="name" value={name} error={nameError} readOnly onChange={(event) => setName(event.target.value)} />
               <Select label="Должность" value={position} options={POSITION_OPTIONS} onChange={setPosition} />
               {position === "other" && (
                 <TextField
