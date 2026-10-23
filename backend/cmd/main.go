@@ -97,26 +97,26 @@ func main() {
 	companyHandler := company.NewHandler(companyService)
 
 	mux.Handle(
-		"POST /api/v1/companies",
+		"POST /api/v1/company",
 		clientOnly(companyHandler.Create),
 	)
 
 	mux.Handle(
-		"GET /api/v1/companies/me",
+		"GET /api/v1/company/me",
 		clientOnly(companyHandler.GetMe),
 	)
 	mux.Handle(
-		"GET /api/v1/companies/by-inn/{inn}",
+		"GET /api/v1/company/by-inn/{inn}",
 		clientOnly(companyHandler.GetByINN),
 	)
 
 	mux.Handle(
-		"POST /api/v1/companies/invitations",
+		"POST /api/v1/company/invitations",
 		clientOnly(companyHandler.CreateInvitation),
 	)
 
 	mux.Handle(
-		"POST /api/v1/companies/join",
+		"POST /api/v1/company/join",
 		clientOnly(companyHandler.Join),
 	)
 	documentRepo := documents.NewRepository(pool)
