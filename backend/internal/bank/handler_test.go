@@ -285,13 +285,18 @@ func TestDecisionTermsValidation(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	past := time.Now().Add(-time.Hour)
 	amount, months, rate := int64(100000), 12, 0
+	minRate, maxRate, lowRate, highRate := MinOfferRateBps, MaxOfferRateBps, MinOfferRateBps-1, MaxOfferRateBps+1
 	cases := []struct {
 		name  string
 		req   DecisionRequest
 		valid bool
 	}{
 		{"approval", DecisionRequest{DataVersion: 2, Action: ActionApprove, ReasonCode: "OK", Comment: "Approved", ValidUntil: &future}, true},
-		{"counter zero rate", DecisionRequest{DataVersion: 2, Action: ActionCounterOffer, ReasonCode: "ALT", Comment: "Alternative", ValidUntil: &future, Offer: &OfferInput{&amount, &months, &rate}}, true},
+		{"counter zero rate", DecisionRequest{DataVersion: 2, Action: ActionCounterOffer, ReasonCode: "ALT", Comment: "Alternative", ValidUntil: &future, Offer: &OfferInput{&amount, &months, &rate}}, false},
+		{"counter min rate", DecisionRequest{DataVersion: 2, Action: ActionCounterOffer, ReasonCode: "ALT", Comment: "Alternative", ValidUntil: &future, Offer: &OfferInput{&amount, &months, &minRate}}, true},
+		{"counter max rate", DecisionRequest{DataVersion: 2, Action: ActionCounterOffer, ReasonCode: "ALT", Comment: "Alternative", ValidUntil: &future, Offer: &OfferInput{&amount, &months, &maxRate}}, true},
+		{"counter rate below range", DecisionRequest{DataVersion: 2, Action: ActionCounterOffer, ReasonCode: "ALT", Comment: "Alternative", ValidUntil: &future, Offer: &OfferInput{&amount, &months, &lowRate}}, false},
+		{"counter rate above range", DecisionRequest{DataVersion: 2, Action: ActionCounterOffer, ReasonCode: "ALT", Comment: "Alternative", ValidUntil: &future, Offer: &OfferInput{&amount, &months, &highRate}}, false},
 		{"approve overrides", DecisionRequest{DataVersion: 2, Action: ActionApprove, ReasonCode: "OK", Comment: "Approved", ValidUntil: &future, Offer: &OfferInput{&amount, &months, &rate}}, false},
 		{"expired", DecisionRequest{DataVersion: 2, Action: ActionApprove, ReasonCode: "OK", Comment: "Approved", ValidUntil: &past}, false},
 		{"counter missing fields", DecisionRequest{DataVersion: 2, Action: ActionCounterOffer, ReasonCode: "ALT", Comment: "Alternative", ValidUntil: &future, Offer: &OfferInput{}}, false},

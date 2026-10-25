@@ -92,6 +92,11 @@ func validateDecisionRequest(req DecisionRequest) (DecisionRequest, error) {
 				return req, ErrInvalidInput
 			}
 
+			// Ставка встречного предложения — от 15% до 30% годовых (тот же коридор, что на фронте).
+			if *req.Offer.AnnualRateBps < MinOfferRateBps || *req.Offer.AnnualRateBps > MaxOfferRateBps {
+				return req, ErrInvalidInput
+			}
+
 			if _, err := monthlyPayment(*req.Offer.AmountKopecks, *req.Offer.TermMonths, *req.Offer.AnnualRateBps); err != nil {
 				return req, err
 			}
@@ -101,6 +106,13 @@ func validateDecisionRequest(req DecisionRequest) (DecisionRequest, error) {
 	}
 	return req, nil
 }
+
+// Допустимый коридор ставки в решении банка, в базисных пунктах (1500 = 15,00%):
+// ключевая ставка ЦБ (~14%) плюс надбавка за риск малого бизнеса.
+const (
+	MinOfferRateBps = 1500
+	MaxOfferRateBps = 3000
+)
 
 func monthlyPayment(amount int64, months, rate int) (int64, error) {
 	payment, err := application.CalculateMonthlyPayment(amount, months, rate)
