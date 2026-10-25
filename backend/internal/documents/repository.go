@@ -43,7 +43,7 @@ func (r *PostgresRepository) Save(ctx context.Context, doc Document, userID stri
 	if err != nil {
 		return nil, fmt.Errorf("lock application: %w", err)
 	}
-	if status != "DRAFT" {
+	if status != "DRAFT" && status != "NEEDS_INFO" {
 		return nil, ErrNotDraft
 	}
 
@@ -53,7 +53,10 @@ func (r *PostgresRepository) Save(ctx context.Context, doc Document, userID stri
 	if inn == nil {
 		return nil, ErrCompanyRequired
 	}
-	if *inn != extraction.INN {
+	if extraction == nil && doc.DocumentType != "SUPPORTING_DOCUMENT" {
+		return nil, ErrInvalidInput
+	}
+	if extraction != nil && *inn != extraction.INN {
 		return nil, ErrINNMismatch
 	}
 
@@ -81,6 +84,13 @@ func (r *PostgresRepository) Save(ctx context.Context, doc Document, userID stri
 
 	if err != nil {
 		return nil, fmt.Errorf("insert document: %w", err)
+	}
+
+	if doc.DocumentType == "SUPPORTING_DOCUMENT" {
+		if err = tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return &doc, nil
 	}
 
 	newVersion := version + 1
@@ -186,12 +196,27 @@ func (r *PostgresRepository) PrepareUpload(ctx context.Context, applicationID, u
 	if err != nil {
 		return nil, fmt.Errorf("prepare PDF upload: %w", err)
 	}
-	if status != "DRAFT" {
+	if status != "DRAFT" && status != "NEEDS_INFO" {
 		return nil, ErrNotDraft
 	}
 	if inn == nil {
 		return nil, ErrCompanyRequired
 	}
 	result.INN = *inn
+	return &result, nil
+}
+
+func (r *PostgresRepository) GetForDownload(ctx context.Context, appID, docID, user, role string) (*DownloadMetadata, error) {
+	var result DownloadMetadata
+	err := r.pool.QueryRow(ctx, `SELECT d.id,d.application_id,d.document_type,d.original_filename,d.processing_status,d.uploaded_at,d.storage_key
+ FROM documents d JOIN applications a ON a.id=d.application_id JOIN users u ON u.id=$3
+ WHERE a.id=$1 AND d.id=$2 AND u.role=$4 AND ((u.role='CLIENT' AND a.created_by_user_id=u.id) OR (u.role='BANK_EMPLOYEE' AND a.status<>'DRAFT' AND a.submitted_at IS NOT NULL))`, appID, docID, user, role).Scan(
+		&result.ID, &result.ApplicationID, &result.DocumentType, &result.OriginalFilename, &result.ProcessingStatus, &result.UploadedAt, &result.StorageKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDocumentNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read document metadata: %w", err)
+	}
 	return &result, nil
 }

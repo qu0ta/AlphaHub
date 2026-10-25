@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
 type Storage interface {
+	Read(context.Context, string) ([]byte, error)
 	Save(ctx context.Context, key string, data []byte) error
 	Delete(ctx context.Context, key string) error
 }
@@ -77,4 +79,41 @@ func (s *LocalStorage) path(key string) (string, error) {
 		return "", fmt.Errorf("invalid storage key")
 	}
 	return filepath.Join(s.dir, key), nil
+}
+
+func (s *LocalStorage) Read(ctx context.Context, key string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := s.path(key); err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(s.dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	file, err := root.Open(key)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > MaxPDFSize {
+		return nil, ErrInvalidPDF
+	}
+	data, err := io.ReadAll(io.LimitReader(file, MaxPDFSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > MaxPDFSize {
+		return nil, ErrTooLarge
+	}
+	if err = ctx.Err(); err != nil {
+		return nil, err
+	}
+	return data, nil
 }

@@ -1,10 +1,12 @@
 package documents
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -36,6 +38,8 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrTooLarge):
 		http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
 
+	case errors.Is(err, ErrDocumentNotFound):
+		http.Error(w, "Document not found", http.StatusNotFound)
 	case errors.Is(err, ErrNotFound):
 		http.Error(w, "Application not found", http.StatusNotFound)
 
@@ -103,6 +107,15 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		defer r.MultipartForm.RemoveAll()
 	}
 
+	types := r.MultipartForm.Value["document_type"]
+	if len(types) > 1 {
+		writeError(w, ErrInvalidInput)
+		return
+	}
+	documentType := ""
+	if len(types) == 1 {
+		documentType = types[0]
+	}
 	files := r.MultipartForm.File["file"]
 	if len(files) != 1 {
 		writeError(w, ErrInvalidInput)
@@ -142,6 +155,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	saved, err := h.service.Upload(
 		r.Context(),
 		UploadInput{
+			DocumentType:  documentType,
 			ApplicationID: r.PathValue("id"),
 			UserID:        userID,
 			Filename:      header.Filename,
@@ -176,4 +190,30 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(documents)
+}
+
+func (h *Handler) Download(w http.ResponseWriter, r *http.Request) { h.download(w, r, "CLIENT") }
+func (h *Handler) DownloadBank(w http.ResponseWriter, r *http.Request) {
+	h.download(w, r, "BANK_EMPLOYEE")
+}
+func (h *Handler) download(w http.ResponseWriter, r *http.Request, role string) {
+	w.Header().Set("Cache-Control", "no-store")
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		http.Error(w, "Unauthorized", 401)
+		return
+	}
+	if user.Role != role {
+		http.Error(w, "Access denied", 403)
+		return
+	}
+	doc, data, err := h.service.Download(r.Context(), r.PathValue("id"), r.PathValue("documentID"), user.ID, role)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": doc.OriginalFilename}))
+	http.ServeContent(w, r, doc.OriginalFilename, doc.UploadedAt, bytes.NewReader(data))
 }

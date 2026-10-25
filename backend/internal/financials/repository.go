@@ -138,7 +138,7 @@ func (r *PostgresRepository) Update(
 		return nil, fmt.Errorf("lock application: %w", err)
 	}
 
-	if status != "DRAFT" {
+	if status != "DRAFT" && status != "NEEDS_INFO" {
 		return nil, ErrNotDraft
 	}
 
@@ -252,7 +252,7 @@ func (r *PostgresRepository) Confirm(
 		return nil, ErrVersionConflict
 	}
 
-	if status != "DRAFT" {
+	if status != "DRAFT" && status != "NEEDS_INFO" {
 		return nil, ErrNotDraft
 	}
 
