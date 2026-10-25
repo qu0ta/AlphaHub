@@ -201,7 +201,7 @@ func TestDSWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if submitted.Status != "SUBMITTED" || submitted.SubmittedAt == nil {
+	if submitted.Status != "IN_REVIEW" || submitted.SubmittedAt == nil {
 		t.Fatal("not submitted")
 	}
 	score, err := apps.GetScoring(ctx, app.ID, userID)
