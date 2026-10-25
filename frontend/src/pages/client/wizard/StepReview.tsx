@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { applicationsApi, type ApplicationPatch } from "../../../api/client";
+import { ApiError, applicationsApi, type ApplicationPatch } from "../../../api/client";
 import { Button } from "../../../components/ui/Button";
 import { Alert, Card } from "../../../components/ui/Card";
 import { Checkbox } from "../../../components/ui/Checkbox";
@@ -47,11 +47,11 @@ export function StepReview({
     if (!app.dataConfirmed) return;
     setSubmitting(true);
     try {
-      // Сначала дожидаемся сохранения последних правок черновика
-      await flush();
+      await flush(); // сначала сохраняем последние правки черновика
+      // Этапы проверки показываются на странице заявки, в «Ходе заявки»
       onSubmitted(await applicationsApi.submit(token, app.id));
-    } catch {
-      setError("Не удалось отправить заявку. Проверьте, что все шаги заполнены, и повторите попытку.");
+    } catch (reason) {
+      setError(reason instanceof ApiError && reason.serverText ? `Не удалось отправить заявку: ${reason.serverText}` : "Не удалось отправить заявку. Проверьте, что все шаги заполнены, и повторите попытку.");
       setSubmitting(false);
     }
   };

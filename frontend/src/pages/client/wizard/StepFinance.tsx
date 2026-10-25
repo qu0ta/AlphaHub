@@ -1,4 +1,4 @@
-import { LoaderCircle, RefreshCw } from "lucide-react";
+import { LoaderCircle, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, applicationsApi, type ApplicationPatch } from "../../../api/client";
 import { Badge } from "../../../components/ui/Badge";
@@ -9,6 +9,7 @@ import { FileRow, pdfError, UploadZone } from "../../../components/ui/Upload";
 import { digitsOnly, formatFileSize, formatNumber, formatPeriod } from "../../../lib/format";
 import { FINANCE_COLUMNS } from "../../../lib/labels";
 import type { Application, FinanceField, FinanceMonth } from "../../../types";
+import { atLeast } from "../../../lib/timing";
 import { financeErrors } from "./validation";
 
 /** Экраны 10 и 11: шаг 3 «Финансы и документы» — до и после загрузки PDF. */
@@ -59,8 +60,8 @@ export function StepFinance({
     if (error) return;
     setUploading(true);
     try {
-      onReplace(await applicationsApi.uploadFinancialDocument(token, app.id, file));
-      setReplacing(false);
+      // Разбор PDF на бэкенде занимает доли секунды — показываем процесс хотя бы 1,8 с
+      onReplace(await atLeast(applicationsApi.uploadFinancialDocument(token, app.id, file), 1800));
     } catch (reason) {
       setUploadError(reason instanceof ApiError ? reason.serverText : "Не удалось загрузить файл");
     } finally {
@@ -68,9 +69,15 @@ export function StepFinance({
     }
   };
 
-  // «Заменить»: снова показываем зону загрузки. Новый PDF перезапишет финансы на бэкенде,
-  // а до загрузки остаются прежний файл и данные (удаления документа в API нет).
-  const [replacing, setReplacing] = useState(false);
+  /**
+   * «Убрать PDF»: очищаем файл и таблицу на экране — снова появляется пустая зона загрузки.
+   * Удаления документа в API нет: на сервере прежние данные остаются, пока не загружен
+   * новый PDF (он их перезапишет). Без файла «Продолжить» не пропустит — валидация шага.
+   */
+  const remove = () => {
+    setUploadError(null);
+    onReplace({ ...app, document: null, financials: null, editedCells: [], dataConfirmed: false });
+  };
 
   const updateCell = (period: string, field: FinanceField, value: number | null) => {
     const financials = (app.financials ?? []).map((row): FinanceMonth => (row.period === period ? { ...row, [field]: value } : row));
@@ -85,7 +92,7 @@ export function StepFinance({
     <Card>
       <CardHeader title="Финансы и документы" subtitle="Загрузите финансовую сводку за 6 полных месяцев." />
 
-      {!doc || replacing ? (
+      {!doc ? (
         <UploadZone
           hint="Один обязательный текстовый PDF, до 10 МБ"
           title={uploading ? "Загружаем файл…" : undefined}
@@ -109,16 +116,16 @@ export function StepFinance({
           }
           actions={
             !processing && (
-              <button type="button" className="text-link" onClick={() => setReplacing(true)}>
-                <RefreshCw size={16} aria-hidden="true" />
-                Заменить
+              <button type="button" className="text-link" onClick={remove}>
+                <Trash2 size={16} aria-hidden="true" />
+                Убрать PDF
               </button>
             )
           }
         />
       )}
 
-      {processing && (
+      {(processing || uploading) && (
         <span className="inline-note">
           <LoaderCircle size={16} className="spin" aria-hidden="true" />
           Извлекаем показатели из документа. Обычно это несколько секунд.

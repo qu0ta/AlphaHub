@@ -8,6 +8,7 @@ import { Alert, Card, InfoBlock, StateMessage } from "../../components/ui/Card";
 import { TextAreaField } from "../../components/ui/Field";
 import { Modal } from "../../components/ui/Modal";
 import { useResource } from "../../hooks/useResource";
+import { atLeast } from "../../lib/timing";
 import { formatLongDate, formatMoney, formatRate, formatTerm } from "../../lib/format";
 import { DECLINE_REASON_LABELS } from "../../lib/labels";
 import { useAuth } from "../../state/auth";
@@ -56,7 +57,7 @@ export function OfferPage() {
     setAccepting(true);
     setError("");
     try {
-      await applicationsApi.acceptOffer(token, app.id);
+      await atLeast(applicationsApi.acceptOffer(token, app.id), 1000);
       navigate(`/applications/${app.id}`, { replace: true });
     } catch {
       setError("Не удалось принять предложение. Повторите попытку.");
@@ -104,7 +105,7 @@ export function OfferPage() {
           offer={offer}
           onClose={() => setDeclineOpen(false)}
           onDecline={async (reason, comment) => {
-            await applicationsApi.declineOffer(token, app.id, reason, comment);
+            await atLeast(applicationsApi.declineOffer(token, app.id, reason, comment), 1000);
             navigate(`/applications/${app.id}`, { replace: true });
           }}
         />

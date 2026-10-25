@@ -246,6 +246,18 @@ const STATUS_TITLES: Record<string, string> = {
   CANCELLED: "Заявка отменена",
 };
 
+const STATUS_TEXTS: Record<string, string> = {
+  SUBMITTED: "Клиент отправил заявку",
+  IN_REVIEW: "Скоринг по финансовым показателям выполнен",
+  MANUAL: "Балл в диапазоне ручной проверки",
+  NEEDS_INFO: "Клиенту отправлен запрос дополнительных данных",
+  OFFERED: "Клиенту отправлено предложение",
+  REJECTED: "Заявка отклонена",
+  ACCEPTED: "Клиент принял предложение",
+  OFFER_DECLINED: "Клиент отказался от предложения",
+  CANCELLED: "Заявка отменена",
+};
+
 /* ---------- Пустая заявка (поля, которых нет в источнике) ---------- */
 
 export function blankApplication(id: string): Application {
@@ -306,7 +318,8 @@ export function fromBankDetail(detail: BankDetail, me: { id: string; name: strin
     id: item.id,
     at: item.created_at,
     title: STATUS_TITLES[item.to_status] ?? item.to_status,
-    text: item.reason,
+    // Служебные причины бэкенд пишет по-английски — показываем русское пояснение по статусу
+    text: /[а-яё]/i.test(item.reason) ? item.reason : (STATUS_TEXTS[item.to_status] ?? ""),
     tone: item.to_status === "REJECTED" ? "error" : index === all.length - 1 ? "current" : "done",
   }));
 
@@ -340,6 +353,7 @@ export function fromBankDetail(detail: BankDetail, me: { id: string; name: strin
     debtPayment: rubles(detail.declared_monthly_debt_payment_kopecks),
     financials: toFinanceMonths(detail.financials),
     document,
+    documents: detail.documents.map((doc) => ({ id: doc.id, name: doc.original_filename, type: doc.document_type, uploadedAt: doc.uploaded_at })),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     submittedAt: row.submitted_at,
@@ -392,6 +406,7 @@ export function clientHistory(row: BackendApplication, offers: BackendOffer[], r
   const events: HistoryEvent[] = [];
   if (row.submitted_at) {
     events.push({ id: "submitted", at: row.submitted_at, title: "Заявка отправлена", text: "Данные и финансовая сводка переданы в банк", tone: "done" });
+    events.push({ id: "data-check", at: row.submitted_at, title: "Проверка данных", text: "ИНН и отчётный период в документе проверены", tone: "done" });
     events.push({ id: "scoring", at: row.submitted_at, title: "Автоматическая проверка", text: "Скоринг по финансовым показателям выполнен", tone: "done" });
   }
   for (const request of requests) {
@@ -400,7 +415,7 @@ export function clientHistory(row: BackendApplication, offers: BackendOffer[], r
   }
   for (const offer of offers) {
     const text = `${(offer.amount_kopecks / 100).toLocaleString("ru-RU")} ₽ · ${offer.term_months} мес. · ${percent(offer.annual_rate_bps).toLocaleString("ru-RU")}%`;
-    events.push({ id: `offer-${offer.id}`, at: offer.created_at, title: "Предложение банка", text: offer.comment ? `${text}. Комментарий банка: ${offer.comment}` : text, tone: "done" });
+    events.push({ id: `offer-${offer.id}`, at: offer.created_at, title: "Предложение банка", text: clientComment(offer.comment) ? `${text}. Комментарий банка: ${offer.comment}` : text, tone: "done" });
     if (offer.responded_at && offer.status === "ACCEPTED") events.push({ id: `acc-${offer.id}`, at: offer.responded_at, title: "Вы приняли предложение", text: "Договор отправлен на подписание", tone: "done" });
     if (offer.responded_at && offer.status === "DECLINED") events.push({ id: `dec-${offer.id}`, at: offer.responded_at, title: "Вы отклонили предложение", text: "Заявка завершена", tone: "done" });
   }
@@ -415,9 +430,17 @@ export function clientHistory(row: BackendApplication, offers: BackendOffer[], r
   return events;
 }
 
+/**
+ * Комментарий для клиента. У автоматических решений бэкенд пишет служебный текст
+ * на английском («Score and active product limits…») — клиенту его не показываем,
+ * показываем только комментарии сотрудника (на русском).
+ */
+export const clientComment = (comment?: string | null) => (comment && /[а-яё]/i.test(comment) ? comment : "");
+
 /** Комментарий банка к последнему предложению — как решение банка для экрана предложения. */
 export function clientDecision(offers: BackendOffer[]): BankDecision | null {
   const latest = offers[0];
-  if (!latest?.comment) return null;
-  return { type: "APPROVE", comment: latest.comment, at: latest.created_at, employeeName: "Банк" };
+  const comment = clientComment(latest?.comment);
+  if (!latest || !comment) return null;
+  return { type: "APPROVE", comment, at: latest.created_at, employeeName: "Банк" };
 }

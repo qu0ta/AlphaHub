@@ -145,6 +145,15 @@ export interface InfoRequest {
   };
 }
 
+/** Документ заявки (метаданные). Сам PDF открывается отдельным запросом. */
+export interface ApplicationDocument {
+  id: string;
+  name: string;
+  /** FINANCIAL_STATEMENT — финансовая сводка, SUPPORTING_DOCUMENT — дополнительный файл по запросу банка */
+  type: string;
+  uploadedAt: string;
+}
+
 export interface ScoreFactor {
   text: string;
   positive: boolean;
@@ -180,6 +189,8 @@ export interface Application {
   financials: FinanceMonth[] | null;
   editedCells: string[]; // «2026-04.revenue» — исправлено клиентом
   document: FinancialDocument | null;
+  /** Все PDF заявки (заполняется в кабинете банка) */
+  documents?: ApplicationDocument[];
   dataConfirmed: boolean;
   createdAt: string;
   updatedAt: string;

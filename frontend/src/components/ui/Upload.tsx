@@ -49,7 +49,9 @@ export function UploadZone({
         event.preventDefault();
         if (!disabled) setDragover(true);
       }}
-      onDragLeave={() => setDragover(false)}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragover(false);
+      }}
       onDrop={onDrop}
     >
       <UploadIcon size={28} className="upload__icon" aria-hidden="true" />

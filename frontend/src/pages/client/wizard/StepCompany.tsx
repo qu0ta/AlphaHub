@@ -23,12 +23,12 @@ export function StepCompany({ app, onNext }: { app: Application; onNext: () => v
           <TextField label="Должность" value={positionText(company.representativePosition, company.representativePositionOther)} readOnly />
         </div>
       ) : (
-        <p className="field__error">Данные компании не найдены. Заполните их в разделе «Компания и документы».</p>
+        <p className="field__error">Данные компании не найдены. Заполните их в разделе «Компания».</p>
       )}
       <p>
         Изменить данные можно в разделе{" "}
         <Link className="text-link" to={`/company/edit?next=${encodeURIComponent(`/applications/${app.id}/edit?step=1`)}`}>
-          «Компания и документы»
+          «Компания»
         </Link>
         .
       </p>

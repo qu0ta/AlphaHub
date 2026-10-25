@@ -1,6 +1,6 @@
 import { LoaderCircle } from "lucide-react";
-import { useState, type ReactNode } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError, applicationsApi } from "../../api/client";
 import { Page } from "../../components/layout/Page";
 import { StatusBadge } from "../../components/ui/Badge";
@@ -11,6 +11,7 @@ import { Modal } from "../../components/ui/Modal";
 import { Timeline } from "../../components/ui/Timeline";
 import { FileRow, pdfError, UploadZone } from "../../components/ui/Upload";
 import { usePolling, useResource } from "../../hooks/useResource";
+import { atLeast } from "../../lib/timing";
 import { annuityPayment, formatDate, formatFileSize, formatLongDate, formatMoney, formatRate, formatTerm } from "../../lib/format";
 import { useAuth } from "../../state/auth";
 import { useProducts } from "../../state/products";
@@ -18,6 +19,40 @@ import type { Application, Offer } from "../../types";
 
 /** Статусы, в которых заявка меняется без участия клиента — их опрашиваем. */
 const LIVE_STATUSES: Application["status"][] = ["SUBMITTED", "IN_REVIEW", "MANUAL", "RETENTION_REVIEW", "SIGNED"];
+
+/**
+ * Этапы проверки сразу после отправки. Бэкенд выполняет их за один запрос,
+ * а клиенту показываем по очереди в «Ходе заявки» — так видно, что проверяет банк.
+ * Затем появляется настоящий результат (ручная проверка, предложение или отказ).
+ */
+const CHECK_STAGES = [
+  { id: "stage-sent", title: "Заявка отправлена", text: "Данные и финансовая сводка переданы в банк" },
+  { id: "stage-data", title: "Проверка данных", text: "Сверяем ИНН и отчётный период в документе" },
+  { id: "stage-scoring", title: "Автоматическая проверка", text: "Считаем скоринг по финансовым показателям" },
+  { id: "stage-decision", title: "Решение по заявке", text: "Определяем дальнейший маршрут заявки" },
+];
+const STAGE_MS = 3000;
+
+/** Номер показываемого этапа; CHECK_STAGES.length — этапы пройдены, показываем результат. */
+function useCheckStages() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const justSubmitted = Boolean((location.state as { justSubmitted?: boolean } | null)?.justSubmitted);
+  const [stage, setStage] = useState(justSubmitted ? 0 : CHECK_STAGES.length);
+
+  // Убираем флаг из истории браузера, чтобы при обновлении страницы анимация не повторялась
+  useEffect(() => {
+    if (justSubmitted) navigate(location.pathname, { replace: true, state: null });
+  }, [justSubmitted, location.pathname, navigate]);
+
+  useEffect(() => {
+    if (stage >= CHECK_STAGES.length) return;
+    const timer = window.setTimeout(() => setStage((current) => current + 1), STAGE_MS);
+    return () => window.clearTimeout(timer);
+  }, [stage]);
+
+  return { stage, checking: stage < CHECK_STAGES.length };
+}
 
 /**
  * Экраны 13, 14, 15, 18, 19, 20 — статус заявки.
@@ -29,7 +64,16 @@ export function ApplicationStatusPage() {
   const navigate = useNavigate();
   const { products } = useProducts();
   const resource = useResource(() => applicationsApi.get(token, id), [token, id]);
-  const app = resource.data;
+  const { stage, checking } = useCheckStages();
+  const loaded = resource.data;
+  // Пока идут этапы проверки — показываем заявку «на рассмотрении» с этапами вместо истории
+  const app: typeof loaded = loaded && checking
+    ? {
+        ...loaded,
+        status: "IN_REVIEW",
+        history: CHECK_STAGES.slice(0, stage + 1).map((item, index) => ({ ...item, at: "", tone: index < stage ? ("done" as const) : ("current" as const) })),
+      }
+    : loaded;
 
   usePolling(() => void resource.reload({ silent: true }), Boolean(app && LIVE_STATUSES.includes(app.status)), 2000);
 
@@ -199,7 +243,7 @@ function InfoRequestCards({ app, token, onUpdated }: { app: Application; token: 
     if (!explanation.trim()) return;
     setSending(true);
     try {
-      onUpdated(await applicationsApi.respondToInfoRequest(token, app.id, { file, explanation: explanation.trim() }));
+      onUpdated(await atLeast(applicationsApi.respondToInfoRequest(token, app.id, { file, explanation: explanation.trim() }), 1200));
     } catch {
       setError("Не удалось отправить данные. Повторите попытку.");
     } finally {

@@ -9,7 +9,7 @@ import { usePolling, useResource } from "../../hooks/useResource";
 import { formatDateAt, formatMoney, formatRate, formatTerm } from "../../lib/format";
 import { useAuth } from "../../state/auth";
 import { useProducts } from "../../state/products";
-import { ChecksCard, CompanyCreditCard, FinanceCard, ScoringCard } from "./parts";
+import { CompanyCreditCard, DocumentsCard, FinanceCard, ScoringCard } from "./parts";
 
 const DECISION_LABELS = { APPROVE: "Одобрено", REJECT: "Отказ", REQUEST_DATA: "Запрошены данные" } as const;
 
@@ -60,7 +60,7 @@ export function BankApplicationPage() {
       <FinanceCard app={app} />
 
       <div className="grid-2">
-        <ChecksCard app={app} />
+        <DocumentsCard app={app} />
         <Card compact>
           <h2 className="card__title">Решение</h2>
           {app.status === "MANUAL" ? (

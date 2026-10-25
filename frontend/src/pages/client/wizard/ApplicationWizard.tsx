@@ -59,14 +59,22 @@ export function ApplicationWizard() {
   const product = products.find((item) => item.code === app.productCode);
 
   /**
-   * Ответ сервера после загрузки PDF: берём из него только документ и финансы.
-   * Остальные поля могли измениться локально и ещё не сохраниться —
-   * их не перетираем.
+   * Ответ сервера после загрузки PDF: берём из него документ, финансы и платёж
+   * по кредитам — всё это DS извлекает из файла. Остальные поля (сумма, срок, цель)
+   * могли измениться локально и ещё не сохраниться — их не перетираем.
+   * Платёж из PDF подставляем, только если он распознан; иначе оставляем введённый.
    */
   function mergeDocument(fresh: typeof app) {
     setApp((current) =>
       current && fresh
-        ? { ...current, document: fresh.document, financials: fresh.financials, editedCells: fresh.editedCells, dataConfirmed: false }
+        ? {
+            ...current,
+            document: fresh.document,
+            financials: fresh.financials,
+            debtPayment: fresh.debtPayment ?? current.debtPayment,
+            editedCells: fresh.editedCells,
+            dataConfirmed: false,
+          }
         : current,
     );
   }
@@ -135,7 +143,7 @@ export function ApplicationWizard() {
           onChange={change}
           flush={flush}
           onEdit={(target) => void goTo(target)}
-          onSubmitted={(submitted) => navigate(`/applications/${submitted.id}`, { replace: true })}
+          onSubmitted={(submitted) => navigate(`/applications/${submitted.id}`, { replace: true, state: { justSubmitted: true } })}
         />
       )}
     </Page>

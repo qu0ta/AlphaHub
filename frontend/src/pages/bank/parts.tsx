@@ -1,5 +1,12 @@
-import { Card, CardHeader, Details } from "../../components/ui/Card";
-import { formatDate, formatMoney, formatPeriod, formatTerm } from "../../lib/format";
+import { ExternalLink } from "lucide-react";
+import { useState } from "react";
+import { ApiError, bankApi } from "../../api/client";
+import { Badge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
+import { Card, CardHeader, Details, InfoBlock } from "../../components/ui/Card";
+import { FileRow } from "../../components/ui/Upload";
+import { formatDate, formatDateAt, formatMoney, formatPeriod, formatTerm, plural } from "../../lib/format";
+import { useAuth } from "../../state/auth";
 import { FINANCE_COLUMNS, PURPOSE_LABELS } from "../../lib/labels";
 import type { Application } from "../../types";
 
@@ -85,31 +92,74 @@ export function FinanceCard({ app }: { app: Application }) {
   );
 }
 
-export function ChecksCard({ app }: { app: Application }) {
+const DOCUMENT_TYPES: Record<string, string> = {
+  FINANCIAL_STATEMENT: "Финансовая сводка",
+  SUPPORTING_DOCUMENT: "Дополнительный документ",
+};
+
+/**
+ * Документы заявки для сотрудника банка: PDF можно открыть в новой вкладке.
+ * Здесь же — ответ клиента на запрос данных и результаты внешних проверок,
+ * если бэкенд их сохранил (ЕГРЮЛ/БКИ пока не подключены — тогда блока проверок нет).
+ */
+export function DocumentsCard({ app }: { app: Application }) {
+  const { token } = useAuth();
+  const [opening, setOpening] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const documents = app.documents ?? [];
+  const response = app.infoRequest?.response;
+
+  const open = async (documentId: string) => {
+    setError("");
+    setOpening(documentId);
+    try {
+      await bankApi.openDocument(token, app.id, documentId);
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.serverText : "Не удалось открыть документ");
+    } finally {
+      setOpening(null);
+    }
+  };
+
   return (
     <Card compact>
-      <h2 className="card__title">Проверки</h2>
-      <ul className="checks">
-        {app.checks.map((check) => (
-          <li key={check.name}>
-            <span className={`checks__dot ${check.ok ? "checks__dot--ok" : "checks__dot--warn"}`} aria-hidden="true" />
-            {check.name}: {check.result}
-          </li>
-        ))}
-        {app.document && (
-          <li>
-            <span className="checks__dot checks__dot--ok" aria-hidden="true" />
-            PDF: {app.document.name}
-          </li>
-        )}
-        {app.infoRequest?.response && (
-          <li>
-            <span className="checks__dot checks__dot--ok" aria-hidden="true" />
-            Клиент дополнил данные: {app.infoRequest.response.explanation}
-            {app.infoRequest.response.fileName ? ` · ${app.infoRequest.response.fileName}` : ""}
-          </li>
-        )}
-      </ul>
+      <CardHeader title="Документы" aside={<Badge>{documents.length ? `${documents.length} ${plural(documents.length, ["файл", "файла", "файлов"])}` : "Нет файлов"}</Badge>} />
+      {documents.length === 0 ? (
+        <p className="muted">Клиент ещё не загрузил документы.</p>
+      ) : (
+        <div className="stack stack--8">
+          {documents.map((doc) => (
+            <FileRow
+              key={doc.id}
+              compact
+              name={doc.name}
+              meta={`${DOCUMENT_TYPES[doc.type] ?? "Документ"} · ${formatDateAt(doc.uploadedAt)}`}
+              actions={
+                <Button variant="secondary" loading={opening === doc.id} onClick={() => void open(doc.id)}>
+                  <ExternalLink size={16} aria-hidden="true" />
+                  Открыть
+                </Button>
+              }
+            />
+          ))}
+        </div>
+      )}
+      {error && <p className="field__error">{error}</p>}
+
+      {response && (
+        <InfoBlock title="Ответ клиента на запрос данных">{response.explanation}</InfoBlock>
+      )}
+
+      {app.checks.length > 0 && (
+        <ul className="checks">
+          {app.checks.map((check) => (
+            <li key={check.name}>
+              <span className={`checks__dot ${check.ok ? "checks__dot--ok" : "checks__dot--warn"}`} aria-hidden="true" />
+              {check.name}: {check.result}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

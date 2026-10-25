@@ -38,7 +38,7 @@ function isTooYoung(registrationDate: string) {
 
 /**
  * Экран 03 «Первичное заполнение компании».
- * Тот же экран открывается для изменения данных из раздела «Компания и документы».
+ * Тот же экран открывается для изменения данных из раздела «Компания».
  */
 export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
   const { token, user } = useAuth();
@@ -135,7 +135,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
 
   return (
     <Page
-      crumbs={[{ label: mode === "onboarding" ? "Данные компании" : "Компания и документы", to: mode === "edit" ? "/company" : undefined }, ...(mode === "edit" ? [{ label: "Изменение данных" }] : [])]}
+      crumbs={[{ label: mode === "onboarding" ? "Данные компании" : "Компания", to: mode === "edit" ? "/company" : undefined }, ...(mode === "edit" ? [{ label: "Изменение данных" }] : [])]}
       title={mode === "onboarding" ? "Расскажите о компании" : "Изменение данных компании"}
       subtitle="Найдите компанию в базе сервиса по ИНН."
     >

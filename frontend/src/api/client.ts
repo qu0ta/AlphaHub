@@ -46,7 +46,7 @@ import {
   type Page as BackendPage,
 } from "./backend";
 import { fromApiCompany, fromApiFinancials, toApiFinancials, type ApiCompany, type ApiFinancials } from "./contracts";
-import { ApiError, request } from "./http";
+import { ApiError, request, requestBlob } from "./http";
 
 export { ApiError };
 
@@ -456,6 +456,25 @@ export const bankApi = {
     const path = params.view === "archive" ? "/bank/archive" : "/bank/applications/page";
     const page = await request<BackendPage<BankQueueRow>>(`${path}?${query}`, auth(token));
     return page.items.map(fromQueueRow);
+  },
+
+  /**
+   * Открыть PDF заявки в новой вкладке. Вкладку открываем сразу по клику
+   * (иначе браузер заблокирует всплывающее окно), а адрес подставляем, когда файл скачан.
+   */
+  async openDocument(token: string | null, applicationId: string, documentId: string): Promise<void> {
+    const tab = window.open("", "_blank");
+    try {
+      const blob = await requestBlob(`/bank/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(documentId)}/download`, token ?? undefined);
+      const url = URL.createObjectURL(blob);
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank");
+      // Ссылка на файл в памяти браузера: освобождаем через минуту, когда вкладка уже открыла PDF
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (reason) {
+      tab?.close();
+      throw reason;
+    }
   },
 
   async get(token: string | null, id: string, employeeName = ""): Promise<Application> {

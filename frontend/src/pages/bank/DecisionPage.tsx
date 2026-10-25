@@ -8,11 +8,12 @@ import { Button } from "../../components/ui/Button";
 import { Alert, Card, CardHeader, Divider, StateMessage } from "../../components/ui/Card";
 import { MoneyField, TermField, TextAreaField, TextField } from "../../components/ui/Field";
 import { useResource } from "../../hooks/useResource";
+import { atLeast } from "../../lib/timing";
 import { annuityPayment, formatMoney, formatTerm } from "../../lib/format";
 import { useAuth } from "../../state/auth";
 import { useProducts } from "../../state/products";
 import type { DecisionType } from "../../types";
-import { ChecksCard, ScoringCard } from "./parts";
+import { DocumentsCard, ScoringCard } from "./parts";
 
 /**
  * Экран 23 «Банк — решение по заявке».
@@ -124,7 +125,7 @@ export function DecisionPage() {
     if (action === "APPROVE" && conditionsInvalid) return;
     setSending(true);
     try {
-      await bankApi.decide(token, app.id, { type: action, comment: comment.trim(), employeeName: user?.name ?? "Сотрудник банка" }, action === "APPROVE" ? { amount: amount!, term: term!, rate: rateNumber } : undefined);
+      await atLeast(bankApi.decide(token, app.id, { type: action, comment: comment.trim(), employeeName: user?.name ?? "Сотрудник банка" }, action === "APPROVE" ? { amount: amount!, term: term!, rate: rateNumber } : undefined), 1000);
       navigate(`/bank/applications/${app.id}`, { replace: true });
     } catch (reason) {
       // Бэкенд объясняет отказ текстом (например, заявку уже взял другой сотрудник)
@@ -241,7 +242,7 @@ export function DecisionPage() {
               </li>
             </ol>
           </Card>
-          <ChecksCard app={app} />
+          <DocumentsCard app={app} />
         </div>
       </div>
     </Page>

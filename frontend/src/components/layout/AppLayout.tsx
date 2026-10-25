@@ -14,7 +14,7 @@ interface NavItem {
 const CLIENT_NAV: NavItem[] = [
   { to: "/applications", label: "Мои заявки", icon: Files },
   { to: "/products", label: "Кредитные продукты", icon: Wallet },
-  { to: "/company", label: "Компания и документы", icon: Building2, match: (path) => path.startsWith("/onboarding") },
+  { to: "/company", label: "Компания", icon: Building2, match: (path) => path.startsWith("/onboarding") },
 ];
 
 const BANK_NAV: NavItem[] = [
