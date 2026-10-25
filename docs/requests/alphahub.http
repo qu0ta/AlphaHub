@@ -1,0 +1,389 @@
+# AlphaHub — запускать блоки по одному; варианты решений взаимоисключающие.
+# VS Code REST Client: именованные ответы ниже заполняют токены/id/версии.
+# Корень проекта — рабочая папка. PDF относительно этого .http файла.
+@base = http://localhost:8080/api/v1
+@ds = http://localhost:8001/api/v1
+@clientEmail = medium@demo.ru
+@password = AlphaHubTest2026!
+@clientToken = {{clientLogin.response.body.$.access_token}}
+@bankToken = {{bankLogin.response.body.$.access_token}}
+@id = {{createDraft.response.body.$.id}}
+@companyID = {{companyMe.response.body.$.id}}
+@version = {{currentApp.response.body.$.data_version}}
+@offerID = REPLACE_FROM_OFFERS
+@requestID = {{requestInfo.response.body.$.id}}
+@documentID = {{upload.response.body.$.id}}
+@employeeID = 10000000-0000-4000-8000-000000000001
+@validUntil = 2026-11-01T12:00:00Z
+
+
+### Регистрация отдельного клиента (уникальный email)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Тест API",
+  "email": "new.client@example.test",
+  "password": "AlphaHubTest2026!"
+}
+
+### Вход клиента: для medium.pdf использовать medium@demo.ru
+# @name clientLogin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{clientEmail}}",
+  "password": "{{password}}"
+}
+
+### Вход банка
+# @name bankLogin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "bank@demo.ru",
+  "password": "{{password}}"
+}
+
+### Профиль
+GET {{base}}/auth/me
+Authorization: Bearer {{clientToken}}
+
+
+### Каталог
+GET {{base}}/products
+
+
+### Оборудование
+GET {{base}}/products/equipment_loan
+
+
+### Компания клиента
+# @name companyMe
+GET {{base}}/company/me
+Authorization: Bearer {{clientToken}}
+
+
+### Локальный реестр
+GET {{base}}/company/by-inn/7700000023
+Authorization: Bearer {{clientToken}}
+
+
+### Привязка компании: только новый пользователь без company_id
+POST {{base}}/company
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{
+  "inn": "7700000023",
+  "name": "ООО «Деловой Вектор»",
+  "business_type": "OOO",
+  "registration_date": "2020-01-01",
+  "main_okved": "62.01"
+}
+
+### Создать medium-черновик
+# @name createDraft
+POST {{base}}/applications
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{
+  "product_code": "WORKING_CAPITAL"
+}
+
+### Перечитать перед каждым запросом с data_version
+# @name currentApp
+GET {{base}}/applications/{{id}}
+Authorization: Bearer {{clientToken}}
+
+
+### Сохранить условия medium
+PATCH {{base}}/applications/{{id}}
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"company_id":"{{companyID}}","requested_amount_kopecks":50000000,"requested_term_months":18,"purpose":"Пополнение оборотных средств","data_version":{{version}}}
+
+### Мои заявки
+GET {{base}}/applications
+Authorization: Bearer {{clientToken}}
+
+
+### Загрузить medium.pdf, затем перечитать currentApp
+# @name upload
+POST {{base}}/applications/{{id}}/documents
+Authorization: Bearer {{clientToken}}
+Content-Type: multipart/form-data; boundary=AlphaHubBoundary
+
+--AlphaHubBoundary
+Content-Disposition: form-data; name="document_type"
+
+FINANCIAL_STATEMENT
+--AlphaHubBoundary
+Content-Disposition: form-data; name="file"; filename="medium.pdf"
+Content-Type: application/pdf
+
+< ../../ds/demo_pdfs/medium.pdf
+--AlphaHubBoundary--
+
+### Документы
+GET {{base}}/applications/{{id}}/documents
+Authorization: Bearer {{clientToken}}
+
+
+### Скачать PDF
+GET {{base}}/applications/{{id}}/documents/{{documentID}}/download
+Authorization: Bearer {{clientToken}}
+
+
+### Извлечённые финансы
+# @name currentFinancials
+GET {{base}}/applications/{{id}}/financials
+Authorization: Bearer {{clientToken}}
+
+
+### Необязательная ручная правка: сохранить все шесть строк, затем currentApp
+PUT {{base}}/applications/{{id}}/financials
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{
+  "data_version": {{version}},
+  "financials": [
+    {
+      "period_month": "2026-04",
+      "revenue_kopecks": 72394245,
+      "operating_inflow_kopecks": 68141401,
+      "operating_outflow_kopecks": 49226032,
+      "tax_outflow_kopecks": 5219201
+    },
+    {
+      "period_month": "2026-05",
+      "revenue_kopecks": 103330758,
+      "operating_inflow_kopecks": 106826121,
+      "operating_outflow_kopecks": 74406357,
+      "tax_outflow_kopecks": 6474463
+    },
+    {
+      "period_month": "2026-06",
+      "revenue_kopecks": 72621465,
+      "operating_inflow_kopecks": 67740990,
+      "operating_outflow_kopecks": 52568194,
+      "tax_outflow_kopecks": 3688886
+    },
+    {
+      "period_month": "2026-07",
+      "revenue_kopecks": 80646034,
+      "operating_inflow_kopecks": 80443021,
+      "operating_outflow_kopecks": 63030235,
+      "tax_outflow_kopecks": 4565632
+    },
+    {
+      "period_month": "2026-08",
+      "revenue_kopecks": 99180161,
+      "operating_inflow_kopecks": 101304061,
+      "operating_outflow_kopecks": 69011848,
+      "tax_outflow_kopecks": 7356647
+    },
+    {
+      "period_month": "2026-09",
+      "revenue_kopecks": 104348538,
+      "operating_inflow_kopecks": 99239381,
+      "operating_outflow_kopecks": 70414420,
+      "tax_outflow_kopecks": 8213940
+    }
+  ],
+  "declared_monthly_debt_payment_kopecks": 10151981
+}
+
+### Подтвердить актуальные финансы (сначала currentApp)
+POST {{base}}/applications/{{id}}/financials/confirm
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"data_version":{{version}}}
+
+### Подать: medium при указанных условиях ожидаемо MANUAL
+POST {{base}}/applications/{{id}}/submit
+Authorization: Bearer {{clientToken}}
+
+
+### Скоринг
+GET {{base}}/applications/{{id}}/scoring
+Authorization: Bearer {{clientToken}}
+
+
+### Офферы (скопировать нужный id в offerID)
+GET {{base}}/applications/{{id}}/offers
+Authorization: Bearer {{clientToken}}
+
+
+### Запросы данных
+GET {{base}}/applications/{{id}}/info-requests
+Authorization: Bearer {{clientToken}}
+
+
+### Очередь банка
+GET {{base}}/bank/applications
+Authorization: Bearer {{bankToken}}
+
+
+### Очередь с пагинацией
+GET {{base}}/bank/applications/page?q=7700000023&assigned=unassigned&limit=20&offset=0
+Authorization: Bearer {{bankToken}}
+
+
+### Детали банка
+GET {{base}}/bank/applications/{{id}}
+Authorization: Bearer {{bankToken}}
+
+
+### Взять в работу (сначала currentApp)
+POST {{base}}/bank/applications/{{id}}/claim
+Authorization: Bearer {{bankToken}}
+Content-Type: application/json
+
+{"data_version":{{version}}}
+
+### Передать сотруднику/освободить (employee_id:null), сначала currentApp
+POST {{base}}/bank/applications/{{id}}/assignment
+Authorization: Bearer {{bankToken}}
+Content-Type: application/json
+
+{"data_version":{{version}},"employee_id":"{{employeeID}}"}
+
+### Вариант A: одобрить (не выполнять вместе с B/C/D; обновить validUntil)
+POST {{base}}/bank/applications/{{id}}/decisions
+Authorization: Bearer {{bankToken}}
+Content-Type: application/json
+
+{"data_version":{{version}},"action":"APPROVE","reason_code":"MANUAL_APPROVAL","comment":"Данные проверены","valid_until":"{{validUntil}}"}
+
+### Вариант B: встречное предложение
+POST {{base}}/bank/applications/{{id}}/decisions
+Authorization: Bearer {{bankToken}}
+Content-Type: application/json
+
+{"data_version":{{version}},"action":"COUNTER_OFFER","reason_code":"ADJUSTED_TERMS","comment":"Предлагаем меньшую сумму","valid_until":"{{validUntil}}","offer":{"amount_kopecks":40000000,"term_months":18,"annual_rate_bps":1990}}
+
+### Вариант C: отказ банка
+POST {{base}}/bank/applications/{{id}}/decisions
+Authorization: Bearer {{bankToken}}
+Content-Type: application/json
+
+{"data_version":{{version}},"action":"REJECT","reason_code":"MANUAL_REJECTION","comment":"Недостаточное покрытие платежей"}
+
+### Вариант D: запросить данные
+# @name requestInfo
+POST {{base}}/bank/applications/{{id}}/info-requests
+Authorization: Bearer {{bankToken}}
+Content-Type: application/json
+
+{"data_version":{{version}},"description":"Уточните назначение платежей","required_items":["Пояснение по операциям"]}
+
+### Ответить на запрос после перечитывания currentApp; вернётся MANUAL
+POST {{base}}/applications/{{id}}/info-requests/{{requestID}}/respond
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"data_version":{{version}},"response_comment":"Платежи поставщикам по договорам"}
+
+### Принять актуальный оффер: сначала currentApp и offers
+POST {{base}}/applications/{{id}}/offers/{{offerID}}/respond
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"data_version":{{version}},"action":"ACCEPT"}
+
+### Вместо принятия: отклонить оффер
+POST {{base}}/applications/{{id}}/offers/{{offerID}}/respond
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"data_version":{{version}},"action":"DECLINE"}
+
+### Мои решения банка
+GET {{base}}/bank/decisions?limit=20&offset=0
+Authorization: Bearer {{bankToken}}
+
+
+### Архив банка
+GET {{base}}/bank/archive?limit=20&offset=0
+Authorization: Bearer {{bankToken}}
+
+
+### Скачать PDF как банк
+GET {{base}}/bank/applications/{{id}}/documents/{{documentID}}/download
+Authorization: Bearer {{bankToken}}
+
+
+### DS напрямую: базовый ScoringResponse
+POST {{ds}}/scoring/evaluate
+Content-Type: application/json
+
+{
+  "inn": "7700000023",
+  "amount_kopecks": 400000000,
+  "term_months": 18,
+  "annual_rate_bps": 1990,
+  "application_date": "2026-10-22",
+  "financials": [
+    {
+      "period_month": "2026-04",
+      "revenue_kopecks": 72394245,
+      "operating_inflow_kopecks": 68141401,
+      "operating_outflow_kopecks": 49226032,
+      "tax_outflow_kopecks": 5219201
+    },
+    {
+      "period_month": "2026-05",
+      "revenue_kopecks": 103330758,
+      "operating_inflow_kopecks": 106826121,
+      "operating_outflow_kopecks": 74406357,
+      "tax_outflow_kopecks": 6474463
+    },
+    {
+      "period_month": "2026-06",
+      "revenue_kopecks": 72621465,
+      "operating_inflow_kopecks": 67740990,
+      "operating_outflow_kopecks": 52568194,
+      "tax_outflow_kopecks": 3688886
+    },
+    {
+      "period_month": "2026-07",
+      "revenue_kopecks": 80646034,
+      "operating_inflow_kopecks": 80443021,
+      "operating_outflow_kopecks": 63030235,
+      "tax_outflow_kopecks": 4565632
+    },
+    {
+      "period_month": "2026-08",
+      "revenue_kopecks": 99180161,
+      "operating_inflow_kopecks": 101304061,
+      "operating_outflow_kopecks": 69011848,
+      "tax_outflow_kopecks": 7356647
+    },
+    {
+      "period_month": "2026-09",
+      "revenue_kopecks": 104348538,
+      "operating_inflow_kopecks": 99239381,
+      "operating_outflow_kopecks": 70414420,
+      "tax_outflow_kopecks": 8213940
+    }
+  ],
+  "declared_monthly_debt_payment_kopecks": 10151981
+}
+
+### DS напрямую: извлечение PDF
+POST {{ds}}/financials/extract
+Content-Type: multipart/form-data; boundary=AlphaHubBoundary
+
+--AlphaHubBoundary
+Content-Disposition: form-data; name="file"; filename="medium.pdf"
+Content-Type: application/pdf
+
+< ../../ds/demo_pdfs/medium.pdf
+--AlphaHubBoundary--

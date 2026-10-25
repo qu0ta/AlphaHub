@@ -61,7 +61,7 @@ func TestBankApplicationRepository(t *testing.T) {
  INSERT INTO companies(id,inn,name,business_type,registration_date,main_okved)
  VALUES ('11111111-1111-4111-8111-111111111111','000000000047','Bank test','OOO','2020-01-01','62.01');
  INSERT INTO users(id,fullname,email,password_hash) VALUES ('22222222-2222-4222-8222-222222222222','Test','bank-detail@test.local','secret-hash');
- INSERT INTO products VALUES ('BANK_DETAIL_TEST','Bank product','Test',1,1000000000,1,60,1990,true);
+ INSERT INTO products (code,name,description,min_amount_kopecks,max_amount_kopecks,min_term_months,max_term_months,base_annual_rate_bps,is_active) VALUES ('BANK_DETAIL_TEST','Bank product','Test',1,1000000000,1,60,1990,true);
  INSERT INTO applications(id,company_id,created_by_user_id,product_code,requested_amount_kopecks,requested_term_months,purpose,status,data_version,submitted_at)
  VALUES ('33333333-3333-4333-8333-333333333333','11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222','BANK_DETAIL_TEST',100000,12,'Materials','MANUAL',2,now());
  INSERT INTO financial_records(id,application_id,data_version,period_month,revenue_kopecks,operating_inflow_kopecks,operating_outflow_kopecks,tax_outflow_kopecks)
@@ -237,7 +237,7 @@ func TestBankApplicationRepository(t *testing.T) {
 		})
 		t.Run("counter offer", func(t *testing.T) {
 			appID := makeApp(t, &employee1)
-			amount, months, rate := int64(90000), 6, 0
+			amount, months, rate := int64(90000), 6, 1800
 			req := approve
 			req.Action = ActionCounterOffer
 			req.Offer = &OfferInput{&amount, &months, &rate}
@@ -245,7 +245,11 @@ func TestBankApplicationRepository(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result.Offer == nil || result.Offer.MonthlyPaymentKopecks != 15000 || result.Offer.AmountKopecks != amount {
+			expectedPayment, err := monthlyPayment(amount, months, rate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Offer == nil || result.Offer.MonthlyPaymentKopecks != expectedPayment || result.Offer.AmountKopecks != amount {
 				t.Fatal("wrong counter offer")
 			}
 			detail, err := repo.GetByID(ctx, appID)

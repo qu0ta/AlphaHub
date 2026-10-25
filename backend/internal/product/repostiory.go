@@ -18,7 +18,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 }
 
 func (r *PostgresRepository) GetAll(ctx context.Context) ([]Product, error) {
-	const query = `SELECT * FROM products ORDER BY name`
+	const query = `SELECT code,name,description,min_amount_kopecks,max_amount_kopecks,min_term_months,max_term_months,base_annual_rate_bps,is_active,requires_collateral FROM products ORDER BY name`
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -39,19 +39,24 @@ func (r *PostgresRepository) GetAll(ctx context.Context) ([]Product, error) {
 			&p.MaxTermMonths,
 			&p.BaseAnnualRateBps,
 			&p.IsActive,
+			&p.RequiresCollateral,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan products: %w", err)
 		}
 
+		p.AnnualRateBps = p.BaseAnnualRateBps
 		products = append(products, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate products: %w", err)
 	}
 	return products, nil
 }
 
 func (r *PostgresRepository) GetByCode(ctx context.Context, code string) (*Product, error) {
 	const query = `
-		SELECT * FROM products WHERE code = $1
+		SELECT code,name,description,min_amount_kopecks,max_amount_kopecks,min_term_months,max_term_months,base_annual_rate_bps,is_active,requires_collateral FROM products WHERE code = $1
 	`
 	var p Product
 
@@ -65,6 +70,7 @@ func (r *PostgresRepository) GetByCode(ctx context.Context, code string) (*Produ
 		&p.MaxTermMonths,
 		&p.BaseAnnualRateBps,
 		&p.IsActive,
+		&p.RequiresCollateral,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrProductNotFound
@@ -73,5 +79,6 @@ func (r *PostgresRepository) GetByCode(ctx context.Context, code string) (*Produ
 		return nil, fmt.Errorf("get product by code: %w", err)
 	}
 
+	p.AnnualRateBps = p.BaseAnnualRateBps
 	return &p, nil
 }

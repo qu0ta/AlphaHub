@@ -60,6 +60,7 @@ export interface Product {
   maxTerm: number;
   rate: number;
   active: boolean;
+  requiresCollateral?: boolean;
 }
 
 /* ---------- Заявка ---------- */

@@ -20,6 +20,7 @@ import (
 	"github.com/qu0ta/AlphaHub/internal/documents"
 	"github.com/qu0ta/AlphaHub/internal/dsclient"
 	"github.com/qu0ta/AlphaHub/internal/financials"
+	"github.com/qu0ta/AlphaHub/internal/product"
 )
 
 // Uses a disposable schema; never reads or changes application rows in public.
@@ -76,10 +77,10 @@ func TestDSWorkflow(t *testing.T) {
 		}
 	}
 	companyID, userID := uuid.NewString(), uuid.NewString()
-	exec(`INSERT INTO companies(id,inn,name,business_type,registration_date,main_okved) VALUES ($1,'7700000023','DS Test','OOO','2020-01-01','62.01')`, companyID)
+	exec(`INSERT INTO companies(id,inn,name,business_type,registration_date,main_okved) VALUES ($1,'7700000098','DS Test','OOO','2020-01-01','62.01')`, companyID)
 	exec(`INSERT INTO users(id,fullname,email,password_hash,company_id) VALUES ($1,'Test','ds@test.local','unused',$2)`, userID, companyID)
-	exec(`INSERT INTO products VALUES ('test','Test','Test',1,1000000000,1,60,1990,true)`)
-	extraction := dsclient.ExtractFinancialsResponse{INN: "7700000023", DeclaredMonthlyDebtPaymentKopecks: 10151981}
+	exec(`INSERT INTO products (code,name,description,min_amount_kopecks,max_amount_kopecks,min_term_months,max_term_months,base_annual_rate_bps,is_active) VALUES ('test','Test','Test',1,1000000000,1,60,1990,true)`)
+	extraction := dsclient.ExtractFinancialsResponse{INN: "7700000098", DeclaredMonthlyDebtPaymentKopecks: 10151981}
 	now := time.Now().UTC()
 	first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	for i := 6; i >= 1; i-- {
@@ -152,6 +153,48 @@ func TestDSWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if app.AnnualRateBps == nil || *app.AnnualRateBps != 1990 {
+		t.Fatal("rate was not snapshotted on create")
+	}
+	// Changing the catalog must not change the rate sent for an existing application.
+	exec("UPDATE products SET base_annual_rate_bps=2500 WHERE code='test'")
+	t.Run("equipment catalog and product limits", func(t *testing.T) {
+		catalog := product.NewPostgresRepository(pool)
+		items, err := catalog.GetAll(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) < 2 {
+			t.Fatal("catalog must preserve existing products")
+		}
+		equipment, err := catalog.GetByCode(ctx, "equipment_loan")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if equipment.AnnualRateBps != 1800 || equipment.BaseAnnualRateBps != 1800 || equipment.RequiresCollateral || !equipment.IsActive || equipment.MinAmountKopecks != 50000000 || equipment.MaxAmountKopecks != 500000000 || equipment.MinTermMonths != 12 || equipment.MaxTermMonths != 36 {
+			t.Fatalf("bad equipment product: %+v", equipment)
+		}
+		for _, c := range []struct {
+			amount int64
+			term   int
+		}{{49999999, 12}, {500000001, 12}, {50000000, 11}, {50000000, 37}} {
+			draft, err := apps.Create(ctx, userID, application.CreateRequest{ProductCode: "equipment_loan"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if draft.ProductCode != "equipment_loan" || draft.AnnualRateBps == nil || *draft.AnnualRateBps != 1800 {
+				t.Fatal("wrong product snapshot")
+			}
+			purpose := "Equipment"
+			draft, err = apps.Update(ctx, draft.ID, userID, application.UpdateRequest{CompanyID: &companyID, RequestedAmountKopecks: &c.amount, RequestedTermMonths: &c.term, Purpose: &purpose, DataVersion: &draft.DataVersion})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = apps.Submit(ctx, draft.ID, userID); !errors.Is(err, application.ErrIncompleteApplication) {
+				t.Fatalf("product limits not enforced: %v", err)
+			}
+		}
+	})
 	amount, term, purpose := int64(50000000), 12, "Working capital"
 
 	app, err = apps.Update(ctx, app.ID, userID, application.UpdateRequest{CompanyID: &companyID, RequestedAmountKopecks: &amount, RequestedTermMonths: &term, Purpose: &purpose, DataVersion: &app.DataVersion})
@@ -209,6 +252,7 @@ func TestDSWorkflow(t *testing.T) {
 	if submitted.Status != "OFFERED" || submitted.SubmittedAt == nil {
 		t.Fatal("not submitted")
 	}
+	exec("UPDATE products SET base_annual_rate_bps=1990 WHERE code='test'")
 	score, err := apps.GetScoring(ctx, app.ID, userID)
 	if err != nil {
 		t.Fatal(err)
@@ -684,6 +728,7 @@ func TestDSWorkflow(t *testing.T) {
 		if err != nil || requests[0].Status != "OPEN" {
 			t.Fatal("failed rescore changed request", err)
 		}
+		exec("UPDATE products SET base_annual_rate_bps=2500 WHERE code='test'")
 		current, err := apps.RespondInfo(ctx, app.ID, request.ID, userID, response)
 		if err != nil {
 			t.Fatal(err)

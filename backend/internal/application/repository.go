@@ -46,7 +46,8 @@ const applicationColumns = `
 	updated_at,
 	submitted_at,
 	signed_at,
-	disbursed_at
+	disbursed_at,
+ annual_rate_bps
 `
 
 type rowScanner interface {
@@ -74,6 +75,7 @@ func scanApplication(row rowScanner) (*Application, error) {
 		&app.SubmittedAt,
 		&app.SignedAt,
 		&app.DisbursedAt,
+		&app.AnnualRateBps,
 	)
 	if err != nil {
 		return nil, err
@@ -90,9 +92,9 @@ func (r *PostgresRepository) Create(ctx context.Context, userID, productCode str
 			product_code,
 			purpose,
 			status,
-			data_version
+			data_version, annual_rate_bps
 		)
-		SELECT $1, $2, p.code, '', 'DRAFT', 1
+		SELECT $1, $2, p.code, '', 'DRAFT', 1, p.base_annual_rate_bps
 		FROM products p
 		WHERE p.code = $3 AND p.is_active = true
 		RETURNING ` + applicationColumns
@@ -301,6 +303,15 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 		return nil, fmt.Errorf("load product limits: %w", err)
 	}
 
+	// New applications snapshot their rate on creation. Legacy rows are initialized once.
+	if current.AnnualRateBps == nil {
+		if _, err = tx.Exec(ctx, "UPDATE applications SET annual_rate_bps=$2 WHERE id=$1 AND annual_rate_bps IS NULL", id, annualRate); err != nil {
+			return nil, err
+		}
+		current.AnnualRateBps = &annualRate
+	} else {
+		annualRate = *current.AnnualRateBps
+	}
 	amount := *current.RequestedAmountKopecks
 	term := *current.RequestedTermMonths
 
@@ -418,7 +429,7 @@ func (r *PostgresRepository) scoreSubmission(ctx context.Context, tx pgx.Tx, app
 		ApplicationDate: submittedAt.Format("2006-01-02"),
 	}
 	var debt *int64
-	err := tx.QueryRow(ctx, `SELECT c.inn, p.base_annual_rate_bps, a.declared_monthly_debt_payment_kopecks
+	err := tx.QueryRow(ctx, `SELECT c.inn, a.annual_rate_bps, a.declared_monthly_debt_payment_kopecks
  FROM applications a JOIN companies c ON c.id=a.company_id JOIN products p ON p.code=a.product_code
  WHERE a.id=$1`, app.ID).Scan(&input.INN, &input.AnnualRateBps, &debt)
 	if err != nil {

@@ -1,0 +1,7 @@
+.venv*
+__pycache__
+*.pyc
+.pytest_cache
+.env
+real_pdf_samples
+docling_output

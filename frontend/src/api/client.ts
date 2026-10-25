@@ -121,6 +121,8 @@ interface ApiProduct {
   min_term_months: number;
   max_term_months: number;
   base_annual_rate_bps: number;
+  annual_rate_bps?: number;
+  requires_collateral?: boolean;
   is_active: boolean;
 }
 
@@ -138,6 +140,7 @@ export const productsApi = {
       maxTerm: row.max_term_months,
       rate: row.base_annual_rate_bps / 100,
       active: row.is_active,
+      requiresCollateral: row.requires_collateral ?? false,
     }));
   },
 };

@@ -10,6 +10,7 @@ type Application struct {
 	CompanyID              *string    `json:"company_id"`
 	CreatedByUserID        string     `json:"created_by_user_id"`
 	ProductCode            string     `json:"product_code"`
+	AnnualRateBps          *int       `json:"annual_rate_bps"`
 	AssignedEmployeeID     *string    `json:"assigned_employee_id"`
 	AcceptedOfferID        *string    `json:"accepted_offer_id"`
 	SignedByUserID         *string    `json:"signed_by_user_id"`

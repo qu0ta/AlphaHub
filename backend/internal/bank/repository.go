@@ -105,7 +105,7 @@ SELECT jsonb_build_object(
  'offers', COALESCE((SELECT jsonb_agg(to_jsonb(o)||jsonb_build_object('status',CASE WHEN o.status='PENDING' AND o.valid_until<=statement_timestamp() THEN 'EXPIRED' ELSE o.status END) ORDER BY o.created_at DESC,o.id DESC)
    FROM offers o JOIN decisions d ON d.id=o.decision_id WHERE d.application_id=a.id),'[]'::jsonb),
  'company', (SELECT to_jsonb(c) FROM companies c WHERE c.id=a.company_id),
- 'product', jsonb_build_object('code',p.code,'name',p.name,'base_annual_rate_bps',p.base_annual_rate_bps),
+ 'product', jsonb_build_object('code',p.code,'name',p.name,'base_annual_rate_bps',COALESCE(a.annual_rate_bps,p.base_annual_rate_bps)),
  'declared_monthly_debt_payment_kopecks', a.declared_monthly_debt_payment_kopecks,
  'financials', COALESCE((
    SELECT jsonb_agg(jsonb_build_object(
@@ -230,8 +230,9 @@ func (r *PostgresRepository) Decide(ctx context.Context, id, employeeID string, 
 	var assigned *string
 	var amount *int64
 	var term *int
-	err = tx.QueryRow(ctx, `SELECT status,data_version,assigned_employee_id,product_code,requested_amount_kopecks,requested_term_months
- FROM applications WHERE id=$1 AND status <> 'DRAFT' AND submitted_at IS NOT NULL FOR UPDATE`, id).Scan(&status, &version, &assigned, &productCode, &amount, &term)
+	var savedRate *int
+	err = tx.QueryRow(ctx, `SELECT status,data_version,assigned_employee_id,product_code,requested_amount_kopecks,requested_term_months,annual_rate_bps
+ FROM applications WHERE id=$1 AND status <> 'DRAFT' AND submitted_at IS NOT NULL FOR UPDATE`, id).Scan(&status, &version, &assigned, &productCode, &amount, &term, &savedRate)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -285,6 +286,9 @@ func (r *PostgresRepository) Decide(ctx context.Context, id, employeeID string, 
    FROM products WHERE code=$1 FOR SHARE`, productCode).Scan(&minAmount, &maxAmount, &minTerm, &maxTerm, &rate, &active)
 		if err != nil {
 			return nil, fmt.Errorf("read offer product: %w", err)
+		}
+		if savedRate != nil {
+			rate = *savedRate
 		}
 		offerAmount, offerTerm := *amount, *term
 		if req.Action == ActionCounterOffer {

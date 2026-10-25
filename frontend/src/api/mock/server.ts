@@ -28,6 +28,7 @@ import { demoFinancials, REGISTRY, REGISTRY_UNAVAILABLE_INN, type DemoDb } from 
 /* ---------- Справочники ---------- */
 
 export const MOCK_PRODUCTS: Product[] = [
+ {code:"equipment_loan",name:"Кредит на оборудование",description:"Финансирование покупки оборудования",minAmount:500000,maxAmount:5000000,minTerm:12,maxTerm:36,rate:18,active:true},
   {
     code: "WORKING_CAPITAL",
     name: "Оборотный кредит",

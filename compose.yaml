@@ -1,38 +1,81 @@
-
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: alphahub-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: alphahub
       POSTGRES_PASSWORD: alphahub_dev_local
       POSTGRES_DB: alphahub
     ports:
-      - "5433:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U alphahub -d alphahub"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
 
   migrate:
     image: migrate/migrate:v4.20.1
-    profiles: ["tools"]
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./backend/migrations:/migrations:ro
-    entrypoint:
-      - migrate
-      - -path
-      - /migrations
-      - -database
-      - postgres://alphahub:alphahub_dev_local@postgres:5432/alphahub?sslmode=disable
+    entrypoint: ["migrate", "-path", "/migrations", "-database", "postgres://alphahub:alphahub_dev_local@postgres:5432/alphahub?sslmode=disable"]
     command: ["up"]
+    restart: "no"
+
+  ds:
+    build: ./ds
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${DS_PORT:-8001}:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/openapi.json', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://alphahub:alphahub_dev_local@postgres:5432/alphahub?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-alphahub-local-demo-secret-change-before-deployment}
+      DS_BASE_URL: http://ds:8001
+      HTTP_PORT: "8080"
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - uploaded_documents:/app/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      ds:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/v1/products"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_data:
+  uploaded_documents:
