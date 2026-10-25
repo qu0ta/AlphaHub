@@ -627,7 +627,7 @@ export const mockBank = {
         const p = product(app.productCode);
         const offer = makeOffer(app, conditions?.amount ?? app.amount ?? p.minAmount, conditions?.term ?? app.term ?? p.minTerm, conditions?.rate ?? p.rate);
         app.offers.push(offer);
-        pushEvent(app, "Решение принято", "Банк подготовил предложение", "done");
+        pushEvent(app, "Решение принято", `Банк подготовил предложение. Комментарий: ${decision.comment.trim()}`, "done");
         pushEvent(app, "Предложение готово", `Ответьте до ${formatLongDate(offer.validUntil)}`);
         setStatus(app, "OFFER");
       } else if (decision.type === "REJECT") {

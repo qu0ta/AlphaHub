@@ -85,6 +85,8 @@ export function OfferPage() {
           />
           <OfferValue label="Выдача" value="После подписания" />
         </dl>
+        {/* Комментарий сотрудника к одобрению — только при одобрении, не путается с запросом данных */}
+        {app.decision?.type === "APPROVE" && app.decision.comment && <InfoBlock title="Комментарий банка">{app.decision.comment}</InfoBlock>}
         <InfoBlock>Это итоговое предложение банка. После принятия запустится симуляция подписания и выдачи.</InfoBlock>
         {error && <Alert>{error}</Alert>}
         <div className="actions-row">

@@ -16,12 +16,44 @@ import { ChecksCard, ScoringCard } from "./parts";
 
 /**
  * Экран 23 «Банк — решение по заявке».
- * Комментарий обязателен для любого решения. При одобрении сотрудник может
- * изменить условия: сумму, срок или ставку (итоговые условия предлагает банк).
+ * Сотрудник сначала выбирает действие, затем пишет комментарий именно для него:
+ * комментарий к одобрению видит клиент в предложении, список для запроса данных
+ * становится пунктами запроса, причина отказа — итоговой причиной.
+ * У каждого действия свой текст, поэтому комментарии не смешиваются.
+ * При одобрении сотрудник может изменить условия: сумму, срок или ставку.
  */
 /** Допустимая ставка в решении банка: ключевая ставка ЦБ ~14% + надбавка за риск малого бизнеса. */
 const RATE_MIN = 15;
 const RATE_MAX = 30;
+
+/** Подписи поля комментария — свои для каждого действия. */
+const ACTIONS: Record<DecisionType, { label: string; field: string; placeholder: string; hint: string; submit: string; required: string }> = {
+  APPROVE: {
+    label: "Одобрить",
+    field: "Комментарий к одобрению",
+    placeholder: "Например: одобрено с учётом стабильной выручки за полгода",
+    hint: "Клиент увидит этот комментарий вместе с предложением банка.",
+    submit: "Одобрить и отправить предложение",
+    required: "Добавьте комментарий к одобрению",
+  },
+  REQUEST_DATA: {
+    label: "Запросить данные",
+    field: "Какие данные нужны",
+    placeholder: "Выписка по расчётному счёту за сентябрь\nПояснение к снижению выручки в июле",
+    hint: "Каждый пункт с новой строки — клиент получит их списком.",
+    submit: "Запросить данные",
+    required: "Перечислите, какие данные нужны",
+  },
+  REJECT: {
+    label: "Отказать",
+    field: "Причина отказа",
+    placeholder: "Укажите причину отказа",
+    hint: "Причина сохранится в заявке и будет показана клиенту.",
+    submit: "Отказать",
+    required: "Укажите причину отказа",
+  },
+};
+const ACTION_ORDER: DecisionType[] = ["APPROVE", "REQUEST_DATA", "REJECT"];
 
 export function DecisionPage() {
   const { id = "" } = useParams();
@@ -32,12 +64,14 @@ export function DecisionPage() {
   const app = resource.data;
   const product = products.find((item) => item.code === app?.productCode);
 
-  const [comment, setComment] = useState("");
+  const [action, setAction] = useState<DecisionType>("APPROVE");
+  // Отдельный текст для каждого действия: при переключении ничего не теряется и не смешивается
+  const [comments, setComments] = useState<Record<DecisionType, string>>({ APPROVE: "", REQUEST_DATA: "", REJECT: "" });
   const [amount, setAmount] = useState<number | null>(null);
   const [term, setTerm] = useState<number | null>(null);
   const [rate, setRate] = useState("");
   const [touched, setTouched] = useState(false);
-  const [sending, setSending] = useState<DecisionType | null>(null);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
   // Условия по умолчанию — как запросил клиент, ставка — базовая по продукту
@@ -74,25 +108,27 @@ export function DecisionPage() {
   if (app.status !== "MANUAL") return <Navigate to={`/bank/applications/${app.id}`} replace />;
 
   const rateNumber = Number(rate.replace(",", "."));
-  const commentError = touched && !comment.trim() ? "Комментарий обязателен для любого решения" : null;
+  const comment = comments[action];
+  const config = ACTIONS[action];
+  const commentError = touched && !comment.trim() ? config.required : null;
   const amountError = touched && product && (!amount || amount < product.minAmount || amount > product.maxAmount) ? `От ${formatMoney(product.minAmount)} до ${formatMoney(product.maxAmount)}` : null;
   const termError = touched && product && (!term || term < product.minTerm || term > product.maxTerm) ? `От ${product.minTerm} до ${formatTerm(product.maxTerm)}` : null;
   const rateError = touched && (!rateNumber || rateNumber < RATE_MIN || rateNumber > RATE_MAX) ? `Ставка от ${RATE_MIN} до ${RATE_MAX}%` : null;
   const payment = amount && term && rateNumber ? annuityPayment(amount, term, rateNumber) : null;
 
-  const decide = async (type: DecisionType) => {
+  const decide = async () => {
     setTouched(true);
     setError("");
     if (!comment.trim()) return;
     const conditionsInvalid = !amount || !term || !rateNumber || (product && (amount < product.minAmount || amount > product.maxAmount || term < product.minTerm || term > product.maxTerm)) || rateNumber < RATE_MIN || rateNumber > RATE_MAX;
-    if (type === "APPROVE" && conditionsInvalid) return;
-    setSending(type);
+    if (action === "APPROVE" && conditionsInvalid) return;
+    setSending(true);
     try {
-      await bankApi.decide(app.id, { type, comment: comment.trim(), employeeName: user?.name ?? "Сотрудник банка" }, type === "APPROVE" ? { amount: amount!, term: term!, rate: rateNumber } : undefined);
+      await bankApi.decide(app.id, { type: action, comment: comment.trim(), employeeName: user?.name ?? "Сотрудник банка" }, action === "APPROVE" ? { amount: amount!, term: term!, rate: rateNumber } : undefined);
       navigate(`/bank/applications/${app.id}`, { replace: true });
     } catch {
       setError("Не удалось сохранить решение. Повторите попытку.");
-      setSending(null);
+      setSending(false);
     }
   };
 
@@ -123,18 +159,37 @@ export function DecisionPage() {
 
       <div className="columns">
         <Card compact>
-          <CardHeader title="Решение" subtitle="Добавьте комментарий к решению и выберите действие по заявке." />
+          <CardHeader title="Решение" subtitle="Выберите действие и добавьте комментарий к нему." />
+          <fieldset className="radio-list radio-list--row">
+            <legend className="visually-hidden">Действие по заявке</legend>
+            {ACTION_ORDER.map((value) => (
+              <label key={value} className="radio">
+                <input
+                  type="radio"
+                  name="decision-action"
+                  value={value}
+                  checked={action === value}
+                  onChange={() => {
+                    setAction(value);
+                    setTouched(false);
+                  }}
+                />
+                {ACTIONS[value].label}
+              </label>
+            ))}
+          </fieldset>
           <TextAreaField
-            label="Комментарий"
+            label={config.field}
             rows={5}
             maxLength={2000}
-            placeholder="Укажите обоснование решения или какие данные нужно уточнить"
-            hint="Для запроса данных перечислите недостающие сведения — каждое с новой строки."
+            placeholder={config.placeholder}
+            hint={config.hint}
             value={comment}
             error={commentError}
-            onChange={(event) => setComment(event.target.value)}
+            onChange={(event) => setComments((current) => ({ ...current, [action]: event.target.value }))}
           />
 
+          {action === "APPROVE" && (
           <div className="stack stack--12">
             <p className="strong">Условия предложения при одобрении</p>
             <div className="conditions-grid">
@@ -151,18 +206,13 @@ export function DecisionPage() {
             </div>
             <p className="hint-text">{payment ? `Ежемесячный платёж ≈ ${formatMoney(payment)}. ` : ""}Клиент запрашивал {formatMoney(app.amount)} на {formatTerm(app.term)}.</p>
           </div>
+          )}
 
           {error && <Alert>{error}</Alert>}
           <Divider />
-          <div className="decision-actions">
-            <Button variant="secondary" loading={sending === "REQUEST_DATA"} disabled={Boolean(sending)} onClick={() => void decide("REQUEST_DATA")}>
-              Запросить данные
-            </Button>
-            <Button variant="secondary" loading={sending === "REJECT"} disabled={Boolean(sending)} onClick={() => void decide("REJECT")}>
-              Отказать
-            </Button>
-            <Button loading={sending === "APPROVE"} disabled={Boolean(sending)} onClick={() => void decide("APPROVE")}>
-              Одобрить
+          <div className="actions-row actions-row--end">
+            <Button variant={action === "REJECT" ? "secondary" : "primary"} loading={sending} onClick={() => void decide()}>
+              {config.submit}
             </Button>
           </div>
           <p className="hint-text">До выбора действия заявка остаётся на проверке.</p>

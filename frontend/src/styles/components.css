@@ -399,6 +399,23 @@ textarea.field__input {
   accent-color: var(--color-primary);
 }
 
+/* Варианты в одну строку (выбор действия в решении банка) */
+.radio-list--row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.radio-list--row .radio {
+  flex: 1 1 160px;
+}
+
+.actions-row--end {
+  justify-content: flex-end;
+}
+
 /* ===== Бейдж статуса ===== */
 .badge {
   display: inline-flex;
