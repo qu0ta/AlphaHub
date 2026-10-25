@@ -19,6 +19,10 @@ import { ChecksCard, ScoringCard } from "./parts";
  * Комментарий обязателен для любого решения. При одобрении сотрудник может
  * изменить условия: сумму, срок или ставку (итоговые условия предлагает банк).
  */
+/** Допустимая ставка в решении банка: ключевая ставка ЦБ ~14% + надбавка за риск малого бизнеса. */
+const RATE_MIN = 15;
+const RATE_MAX = 30;
+
 export function DecisionPage() {
   const { id = "" } = useParams();
   const { user } = useAuth();
@@ -73,14 +77,14 @@ export function DecisionPage() {
   const commentError = touched && !comment.trim() ? "Комментарий обязателен для любого решения" : null;
   const amountError = touched && product && (!amount || amount < product.minAmount || amount > product.maxAmount) ? `От ${formatMoney(product.minAmount)} до ${formatMoney(product.maxAmount)}` : null;
   const termError = touched && product && (!term || term < product.minTerm || term > product.maxTerm) ? `От ${product.minTerm} до ${formatTerm(product.maxTerm)}` : null;
-  const rateError = touched && (!rateNumber || rateNumber < 5 || rateNumber > 40) ? "Ставка от 5 до 40%" : null;
+  const rateError = touched && (!rateNumber || rateNumber < RATE_MIN || rateNumber > RATE_MAX) ? `Ставка от ${RATE_MIN} до ${RATE_MAX}%` : null;
   const payment = amount && term && rateNumber ? annuityPayment(amount, term, rateNumber) : null;
 
   const decide = async (type: DecisionType) => {
     setTouched(true);
     setError("");
     if (!comment.trim()) return;
-    const conditionsInvalid = !amount || !term || !rateNumber || (product && (amount < product.minAmount || amount > product.maxAmount || term < product.minTerm || term > product.maxTerm)) || rateNumber < 5 || rateNumber > 40;
+    const conditionsInvalid = !amount || !term || !rateNumber || (product && (amount < product.minAmount || amount > product.maxAmount || term < product.minTerm || term > product.maxTerm)) || rateNumber < RATE_MIN || rateNumber > RATE_MAX;
     if (type === "APPROVE" && conditionsInvalid) return;
     setSending(type);
     try {
