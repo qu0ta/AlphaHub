@@ -51,7 +51,6 @@ export function ApplicationsPage() {
   const navigate = useNavigate();
   const applications = useResource(() => applicationsApi.list(token), [token]);
   const company = useResource(() => companyApi.get(token), [token]);
-  const documents = useResource(() => companyApi.listDocuments(token), [token]);
   const { products } = useProducts();
 
   const list = applications.data ?? [];
@@ -62,7 +61,6 @@ export function ApplicationsPage() {
   const inReview = list.filter((app) => IN_PROGRESS.includes(app.status)).length;
   const summary = [inReview && `${inReview} на рассмотрении`, drafts && `${drafts} ${drafts === 1 ? "черновик" : "черновика"}`].filter(Boolean).join(" · ");
   const productName = (code: string) => products.find((item) => item.code === code)?.name ?? "Кредит";
-  const doc = documents.data?.[0];
 
   return (
     <Page
@@ -138,10 +136,10 @@ export function ApplicationsPage() {
               <FolderCheck size={24} />
             </span>
             <div className="company-head__text">
-              <p className="strong">{doc ? (doc.status === "PROCESSING" ? "Компания добавлена, документ обрабатывается" : "Компания и документы в порядке") : "Компания добавлена, документа пока нет"}</p>
+              <p className="strong">Компания добавлена</p>
               <p className="muted">
                 {company.data.name}
-                {doc ? " · Бухгалтерская отчётность" : " · Загрузите отчётность за последний год"}
+                {" · Финансовую сводку загрузите в заявке"}
               </p>
             </div>
             <Link to="/company" className="text-link">

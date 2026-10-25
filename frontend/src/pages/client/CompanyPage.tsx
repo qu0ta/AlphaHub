@@ -1,38 +1,29 @@
-import { Building2, LoaderCircle, Pencil, ShieldCheck, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { Link, Navigate } from "react-router-dom";
-import { ApiError, companyApi } from "../../api/client";
+import { Building2, Pencil } from "lucide-react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { companyApi } from "../../api/client";
 import { Page } from "../../components/layout/Page";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
-import { Card, CardHeader, Details, Divider, InfoBlock, StateMessage } from "../../components/ui/Card";
-import { Modal } from "../../components/ui/Modal";
-import { FileRow, pdfError, UploadZone } from "../../components/ui/Upload";
-import { usePolling, useResource } from "../../hooks/useResource";
-import { formatDate, formatDateAt, formatFileSize, plural } from "../../lib/format";
+import { Card, Details, Divider, InfoBlock, StateMessage } from "../../components/ui/Card";
+import { useResource } from "../../hooks/useResource";
+import { formatDate } from "../../lib/format";
 import { BUSINESS_TYPE_FULL, positionText } from "../../lib/labels";
 import { useAuth } from "../../state/auth";
-import type { CompanyDocument } from "../../types";
 
-/** Экраны 04 и 05 «Компания и документы» — пустое и заполненное состояние. */
+/**
+ * Экраны 04 и 05 «Компания».
+ * Документы прикладываются к конкретной заявке (финансовая сводка на шаге 3 мастера),
+ * отдельного хранилища документов компании на бэкенде нет.
+ */
 export function CompanyPage() {
   const { token } = useAuth();
+  const navigate = useNavigate();
   const company = useResource(() => companyApi.get(token), [token]);
-  const documents = useResource(() => companyApi.listDocuments(token), [token]);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [toDelete, setToDelete] = useState<CompanyDocument | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
-  const docs = documents.data ?? [];
-  const processing = docs.some((doc) => doc.status === "PROCESSING");
-  // Пока документ обрабатывается — обновляем статус каждые 3 секунды
-  usePolling(() => void documents.reload({ silent: true }), processing, 3000);
-
-  if (company.loading) return <Page crumbs={[{ label: "Компания и документы" }]} title="Компания и документы"><Card>Загружаем данные компании…</Card></Page>;
+  if (company.loading) return <Page crumbs={[{ label: "Компания" }]} title="Компания"><Card>Загружаем данные компании…</Card></Page>;
   if (company.error) {
     return (
-      <Page crumbs={[{ label: "Компания и документы" }]} title="Компания и документы">
+      <Page crumbs={[{ label: "Компания" }]} title="Компания">
         <Card>
           <StateMessage title="Не удалось загрузить данные" text="Проверьте соединение и повторите попытку." action={<Button onClick={() => void company.reload()}>Повторить</Button>} />
         </Card>
@@ -44,41 +35,8 @@ export function CompanyPage() {
 
   const data = company.data;
 
-  const upload = async (file: File) => {
-    const error = pdfError(file);
-    setUploadError(error);
-    if (error) return;
-    setUploading(true);
-    try {
-      await companyApi.uploadDocument(token, file);
-      await documents.reload({ silent: true });
-    } catch (reason) {
-      setUploadError(reason instanceof ApiError ? reason.serverText : "Не удалось загрузить файл");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!toDelete) return;
-    setDeleting(true);
-    try {
-      await companyApi.deleteDocument(token, toDelete.id);
-      await documents.reload({ silent: true });
-      setToDelete(null);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const doc = docs[0];
-
   return (
-    <Page
-      crumbs={[{ label: "Компания и документы" }]}
-      title="Компания и документы"
-      subtitle={doc ? "Реквизиты компании и актуальные документы для ваших заявок." : "Проверьте реквизиты и добавьте документ компании."}
-    >
+    <Page crumbs={[{ label: "Компания" }]} title="Компания" subtitle="Реквизиты компании подставляются во все ваши заявки.">
       <Card>
         <div className="company-head">
           <span className="icon-tile" aria-hidden="true">
@@ -107,89 +65,12 @@ export function CompanyPage() {
         />
       </Card>
 
-      <Card>
-        <CardHeader
-          title="Документы компании"
-          subtitle={doc ? "Бухгалтерская отчётность за последний завершённый год." : "Загрузите бухгалтерскую отчётность за последний завершённый год."}
-          aside={<Badge>{docs.length ? `${docs.length} ${plural(docs.length, ["документ", "документа", "документов"])}` : "Нет документов"}</Badge>}
-        />
-
-        {doc ? (
-          <>
-            <FileRow
-              name={doc.name}
-              meta={`${formatFileSize(doc.sizeBytes)} · Загружен ${formatDateAt(doc.uploadedAt)}`}
-              status={doc.status === "PROCESSING" ? <Badge tone="warning">Обрабатывается</Badge> : <Badge tone="success">Проверен</Badge>}
-            />
-            {uploadError && <p className="field__error">{uploadError}</p>}
-            <div className="actions-row actions-row--between">
-              <span className="inline-note">
-                {doc.status === "PROCESSING" ? (
-                  <>
-                    <LoaderCircle size={16} className="spin" aria-hidden="true" />
-                    Проверяем файл. Это займёт несколько минут.
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck size={16} aria-hidden="true" />
-                    Файл проверен и будет использован в заявках.
-                  </>
-                )}
-              </span>
-              <div className="actions-row actions-row--wide">
-                <label className="button button--secondary">
-                  {uploading ? "Загружаем…" : "Заменить файл"}
-                  <input
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    className="visually-hidden"
-                    disabled={uploading}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void upload(file);
-                      event.target.value = "";
-                    }}
-                  />
-                </label>
-                <button type="button" className="text-link" onClick={() => setToDelete(doc)}>
-                  <Trash2 size={16} aria-hidden="true" />
-                  Удалить
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <UploadZone error={uploadError} disabled={uploading} title={uploading ? "Загружаем файл…" : undefined} onFile={(file) => void upload(file)} />
-            <span className="inline-note">
-              <ShieldCheck size={16} aria-hidden="true" />
-              Файл будет доступен только вам и специалистам, которые рассматривают заявку.
-            </span>
-          </>
-        )}
-      </Card>
-
-      {doc && (
-        <InfoBlock title={doc.status === "PROCESSING" ? "Документ сохранён" : "Всё готово"}>
-          {doc.status === "PROCESSING"
-            ? "Можно продолжить работу в кабинете. Статус обновится после завершения обработки."
-            : "Можно подавать заявку — реквизиты и документ подставятся автоматически."}
-        </InfoBlock>
-      )}
-
-      {toDelete && (
-        <Modal title="Удалить документ?" onClose={() => setToDelete(null)}>
-          <p className="modal__text">Файл исчезнет из документов компании. При необходимости его можно загрузить снова.</p>
-          <div className="modal__actions">
-            <Button variant="secondary" onClick={() => setToDelete(null)}>
-              Отмена
-            </Button>
-            <Button loading={deleting} onClick={() => void confirmDelete()}>
-              Удалить
-            </Button>
-          </div>
-        </Modal>
-      )}
+      <InfoBlock title="Финансовые документы">
+        Финансовая сводка за 6 месяцев загружается в каждой заявке на шаге «Финансы и документы» — так банк видит актуальные данные.
+      </InfoBlock>
+      <div>
+        <Button onClick={() => navigate("/products")}>Выбрать кредит</Button>
+      </div>
     </Page>
   );
 }

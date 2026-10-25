@@ -13,9 +13,6 @@ export class ApiError extends Error {
   }
 }
 
-/** api — настоящий бэкенд по умолчанию; mock включается явно. */
-export const API_MODE: "mock" | "api" = import.meta.env.VITE_API_MODE === "mock" ? "mock" : "api";
-
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 
 export async function request<T>(path: string, options: RequestInit & { token?: string } = {}): Promise<T> {
