@@ -99,8 +99,6 @@ model_version непустая строка, оба массива фактор�
 | 6 | Go | `POST /api/v1/company` | CLIENT + Bearer | 201 |
 | 7 | Go | `GET /api/v1/company/me` | CLIENT + Bearer | 200 |
 | 8 | Go | `GET /api/v1/company/by-inn/{inn}` | CLIENT + Bearer | 200 |
-| 9 | Go | `POST /api/v1/company/invitations` | CLIENT + Bearer | 201 |
-| 10 | Go | `POST /api/v1/company/join` | CLIENT + Bearer | 200 |
 | 11 | Go | `POST /api/v1/applications` | CLIENT + Bearer | 201 |
 | 12 | Go | `GET /api/v1/applications` | CLIENT + Bearer | 200 |
 | 13 | Go | `GET /api/v1/applications/{id}` | CLIENT + Bearer | 200 |
@@ -297,7 +295,9 @@ code — строка, например WORKING_CAPITAL. Пробелы по к�
 }
 ```
 
-**Ошибки:** 400: Invalid request body / Invalid company input. 404: User not found. 409: Company with this INN already exists / User already has a company.
+**Ошибки:** 400: Invalid request body / Invalid company input. 404: User not found. 409: User already has a company.
+
+Если компания с таким ИНН уже есть в базе (например, демо-компании из миграции 17), новая не создаётся: пользователь привязывается к существующей и получает её данные (201). Приглашения и `/company/join` удалены 25.10.2026.
 
 ### 5.7. Своя компания
 
@@ -352,60 +352,6 @@ inn — 10 или 12 цифр. Поиск только в локальной Б�
 ```
 
 **Ошибки:** 400: Invalid company input. 404: Company not found.
-
-### 5.9. Приглашение в компанию
-
-**`POST /api/v1/company/invitations`**
-
-Доступ: CLIENT + Bearer. Успех: **201**.
-
-Пользователь должен иметь компанию. 32 случайных байта кодируются в base64url без padding. TTL 15 минут. В БД сохраняется SHA-256 кода; ответ Cache-Control: no-store. Повторный запрос создаёт новое приглашение.
-
-**Запрос**
-
-Тело не требуется. Параметры пути указаны в URL; query-параметры не требуются.
-
-**Пример ответа**
-
-```json
-{
-  "code": "<одноразовый base64url-код>",
-  "expires_at": "2026-10-23T12:15:00Z"
-}
-```
-
-**Ошибки:** 404: Company not found.
-
-### 5.10. Принять приглашение
-
-**`POST /api/v1/company/join`**
-
-Доступ: CLIENT + Bearer. Успех: **200**.
-
-Код trim и base64url-декодирование в 32 байта. Приглашение должно быть неиспользованным и непросроченным. Привязка и погашение кода атомарны. У пользователя ещё не должно быть компании.
-
-**Запрос**
-
-```json
-{
-  "code": "<код из приглашения>"
-}
-```
-
-**Пример ответа**
-
-```json
-{
-  "id": "22222222-2222-4222-8222-222222222222",
-  "inn": "7700000023",
-  "name": "ООО Пример",
-  "business_type": "OOO",
-  "registration_date": "2020-01-01",
-  "main_okved": "62.01"
-}
-```
-
-**Ошибки:** 400: Invalid request body / Invalid or expired invitation. 404: User not found. 409: User already has a company.
 
 ### 5.11. Создать черновик
 
@@ -1262,12 +1208,6 @@ time.Time сериализуется строкой RFC3339; json.RawMessage —
 | `registration_date` | `string` | Поле сериализуется |
 | `main_okved` | `string` | Поле сериализуется |
 
-### company.InvitationResponse
-
-| JSON-поле | Go-тип | Сериализация |
-|---|---|---|
-| `code` | `string` | Поле сериализуется |
-| `expires_at` | `time.Time` | Поле сериализуется |
 
 ### company.JoinRequest
 
@@ -1413,7 +1353,7 @@ time.Time сериализуется строкой RFC3339; json.RawMessage —
 ## 7. Жизненный цикл и версии
 
 1. Зарегистрироваться и получить JWT через login.
-2. Создать компанию или принять приглашение. Проверить company_id через /auth/me.
+2. Создать компанию (или привязаться к существующей по ИНН). Проверить company_id через /auth/me.
 3. Выбрать активный продукт через /products. Создание продукта по HTTP отсутствует.
 4. POST /applications создаёт DRAFT с data_version=1.
 5. PATCH заявки задаёт компанию, сумму, срок и цель с актуальной версией. После успеха версия 2.

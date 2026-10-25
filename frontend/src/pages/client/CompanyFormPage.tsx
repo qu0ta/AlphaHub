@@ -54,7 +54,6 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
   const [positionOther, setPositionOther] = useState("");
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [invitationCode, setInvitationCode] = useState("");
   const [saveError, setSaveError] = useState("");
   const lookupId = useRef(0);
 
@@ -124,7 +123,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
         representativeName: name.trim(),
         representativePosition: position,
         representativePositionOther: position === "other" ? positionOther.trim() : "",
-      }, invitationCode);
+      });
       navigate(next ?? (mode === "onboarding" ? "/products" : "/company"), { replace: true });
     } catch (reason) {
       setSaveError(reason instanceof ApiError ? reason.serverText : "Не удалось сохранить компанию. Повторите попытку.");
@@ -162,11 +161,6 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
 
             <LookupResult lookup={lookup} tooYoung={tooYoung} onRetry={() => void runLookup(inn)} />
 
-            {API_MODE === "api" && found?.id && !existing.data && (
-              <TextField label="Код приглашения в компанию" value={invitationCode}
-                onChange={(event) => setInvitationCode(event.target.value)}
-                placeholder="Получите код у участника компании" />
-            )}
             <div className="form-grid">
               <TextField label="ФИО представителя" autoComplete="name" value={name} error={nameError} readOnly onChange={(event) => setName(event.target.value)} />
               <Select label="Должность" value={position} options={POSITION_OPTIONS} onChange={setPosition} />
@@ -203,7 +197,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
         <div className="columns__side">
           <InfoBlock title="Зачем нужны данные компании">Они помогут подготовить документы и связать будущие заявки с вашим бизнесом.</InfoBlock>
           <InfoBlock title="Откуда берутся данные" icon={<LockKeyhole size={20} />}>
-            {API_MODE === "api" ? "Реквизиты загружаются из базы сервиса. Для присоединения к существующей компании нужен код приглашения от её участника." : "Название, форму бизнеса, дату регистрации и ОКВЭД мы получаем из демонстрационного реестра."}
+            {API_MODE === "api" ? "Реквизиты загружаются из базы сервиса. Изменить их вручную нельзя." : "Название, форму бизнеса, дату регистрации и ОКВЭД мы получаем из демонстрационного реестра."}
           </InfoBlock>
         </div>
       </div>

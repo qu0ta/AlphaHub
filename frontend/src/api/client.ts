@@ -154,28 +154,22 @@ export const companyApi = {
       throw reason;
     }
   },
-  async save(token: string | null, company: Company, invitationCode?: string): Promise<Company> {
+  async save(token: string | null, company: Company): Promise<Company> {
     const userId = currentUserId(token);
     if (API_MODE === "mock") return mockCompany.save(userId, company);
     let saved = company;
-    if (company.id) {
-      let linked: ApiCompany | null = null;
-      try {
-        linked = await request<ApiCompany>("/company/me", { token: token ?? undefined });
-      } catch (reason) {
-        if (!(reason instanceof ApiError && reason.status === 404)) throw reason;
-      }
-      if (linked && linked.id !== company.id) throw new ApiError(409, "Вы уже привязаны к другой компании");
-      if (!linked) {
-        if (!invitationCode?.trim()) throw new ApiError(400, "Введите код приглашения от участника компании");
-        linked = await request<ApiCompany>("/company/join", {
-          method: "POST", token: token ?? undefined,
-          body: JSON.stringify({ code: invitationCode.trim() }),
-        });
-      }
-      saved = { ...fromApiCompany(linked), representativeName: company.representativeName, representativePosition: company.representativePosition, representativePositionOther: company.representativePositionOther };
+    // Пользователь уже привязан к компании? Тогда повторно привязывать не нужно.
+    let linked: ApiCompany | null = null;
+    try {
+      linked = await request<ApiCompany>("/company/me", { token: token ?? undefined });
+    } catch (reason) {
+      if (!(reason instanceof ApiError && reason.status === 404)) throw reason;
     }
-    if (!company.id) {
+    if (linked && linked.inn !== company.inn) throw new ApiError(409, "Вы уже привязаны к другой компании");
+    if (linked) {
+      saved = { ...fromApiCompany(linked), representativeName: company.representativeName, representativePosition: company.representativePosition, representativePositionOther: company.representativePositionOther };
+    } else {
+      // POST /company: бэкенд создаёт компанию или, если ИНН уже есть в базе, привязывает к существующей.
       const row = await request<ApiCompany>("/company", {
         method: "POST",
         token: token ?? undefined,
@@ -371,7 +365,17 @@ const apiApplications = {
   },
 
   async confirmFinancials(token: string | null, id: string): Promise<Application> {
-    const row = fromApiFinancials(await request<ApiFinancials>(`/applications/${encodeURIComponent(id)}/financials/confirm`, { method: "POST", token: token ?? undefined }));
+    // Бэкенд подтверждает финансы только для текущей версии заявки: тело { data_version }.
+    // Берём версию свежим GET, а не из кэша: после PUT/загрузки PDF она могла вырасти.
+    const current = await request<ApiFinancials>(`/applications/${encodeURIComponent(id)}/financials`, { token: token ?? undefined });
+    const row = fromApiFinancials(
+      await request<ApiFinancials>(`/applications/${encodeURIComponent(id)}/financials/confirm`, {
+        method: "POST",
+        token: token ?? undefined,
+        body: JSON.stringify({ data_version: current.data_version }),
+      }),
+    );
+    versions.set(id, row.version);
     return mockApplications.update(currentUserId(token), id, { debtPayment: row.debtPayment, financials: row.financials, dataConfirmed: row.confirmed });
   },
 };

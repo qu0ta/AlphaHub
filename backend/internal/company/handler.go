@@ -46,13 +46,6 @@ func writeServiceError(w http.ResponseWriter, err error) {
 			http.StatusNotFound,
 		)
 
-	case errors.Is(err, ErrINNExists):
-		http.Error(
-			w,
-			"Company with this INN already exists",
-			http.StatusConflict,
-		)
-
 	case errors.Is(err, ErrAlreadyLinked):
 		http.Error(
 			w,
@@ -66,13 +59,6 @@ func writeServiceError(w http.ResponseWriter, err error) {
 			"User not found",
 			http.StatusNotFound,
 		)
-	case errors.Is(err, ErrInvalidInvitation):
-		http.Error(
-			w,
-			"Invalid or expired invitation",
-			http.StatusBadRequest,
-		)
-
 	default:
 		log.Printf("company error: %v", err)
 		http.Error(
@@ -141,52 +127,4 @@ func (h *Handler) GetByINN(w http.ResponseWriter, r *http.Request) {
 		log.Printf("encode company response: %v", err)
 	}
 }
-func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
 
-	invitation, err := h.service.CreateInvitation(
-		r.Context(),
-		user.ID,
-	)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusCreated)
-
-	_ = json.NewEncoder(w).Encode(invitation)
-}
-
-func (h *Handler) Join(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	var req JoinRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	joinedCompany, err := h.service.JoinByInvitation(
-		r.Context(),
-		user.ID,
-		req.Code,
-	)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(toResponse(joinedCompany))
-}

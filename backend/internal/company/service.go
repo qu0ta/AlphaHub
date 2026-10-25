@@ -2,10 +2,6 @@ package company
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -15,20 +11,18 @@ import (
 )
 
 var (
-	ErrInvalidInput      = errors.New("invalid company input")
-	ErrNotFound          = errors.New("company not found")
-	ErrINNExists         = errors.New("company with this INN already exists")
-	ErrAlreadyLinked     = errors.New("user already has a company")
-	ErrUserNotFound      = errors.New("user not found")
-	ErrInvalidInvitation = errors.New("invalid or expired invitation")
+	ErrInvalidInput  = errors.New("invalid company input")
+	ErrNotFound      = errors.New("company not found")
+	ErrAlreadyLinked = errors.New("user already has a company")
+	ErrUserNotFound  = errors.New("user not found")
 )
 
 type Repository interface {
+	// CreateForUser привязывает пользователя к компании по ИНН:
+	// если компании с таким ИНН ещё нет — создаёт её, если есть — присоединяет к существующей.
 	CreateForUser(ctx context.Context, userID string, company Company) (*Company, error)
 	GetByUserID(ctx context.Context, userID string) (*Company, error)
 	GetByINN(ctx context.Context, inn string) (*Company, error)
-	CreateInvitation(ctx context.Context, userID string, tokenHash string, expiresAt time.Time) error
-	RedeemInvitation(ctx context.Context, userID string, tokenHash string) (*Company, error)
 }
 
 type Service struct {
@@ -59,10 +53,6 @@ func validText(value string, maxLength int) bool {
 		utf8.RuneCountInString(value) <= maxLength
 }
 
-func hashInvitation(code string) string {
-	sum := sha256.Sum256([]byte(code))
-	return hex.EncodeToString(sum[:])
-}
 func (s *Service) Create(ctx context.Context, userID string, req CreateRequest) (*Company, error) {
 
 	if _, err := uuid.Parse(userID); err != nil {
@@ -117,51 +107,4 @@ func (s *Service) GetByINN(ctx context.Context, inn string) (*Company, error) {
 		return nil, ErrInvalidInput
 	}
 	return s.repo.GetByINN(ctx, inn)
-}
-func (s *Service) CreateInvitation(ctx context.Context, userID string) (*InvitationResponse, error) {
-	if _, err := uuid.Parse(userID); err != nil {
-		return nil, ErrInvalidInput
-	}
-
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return nil, err
-	}
-
-	code := base64.RawURLEncoding.EncodeToString(raw)
-	expiresAt := time.Now().UTC().Add(15 * time.Minute)
-
-	err := s.repo.CreateInvitation(
-		ctx,
-		userID,
-		hashInvitation(code),
-		expiresAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &InvitationResponse{
-		Code:      code,
-		ExpiresAt: expiresAt,
-	}, nil
-}
-
-func (s *Service) JoinByInvitation(ctx context.Context, userID string, code string) (*Company, error) {
-	if _, err := uuid.Parse(userID); err != nil {
-		return nil, ErrInvalidInput
-	}
-
-	code = strings.TrimSpace(code)
-
-	raw, err := base64.RawURLEncoding.DecodeString(code)
-	if err != nil || len(raw) != 32 {
-		return nil, ErrInvalidInvitation
-	}
-
-	return s.repo.RedeemInvitation(
-		ctx,
-		userID,
-		hashInvitation(code),
-	)
 }

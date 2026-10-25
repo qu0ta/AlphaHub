@@ -138,15 +138,6 @@ func main() {
 		clientOnly(companyHandler.GetByINN),
 	)
 
-	mux.Handle(
-		"POST /api/v1/company/invitations",
-		clientOnly(companyHandler.CreateInvitation),
-	)
-
-	mux.Handle(
-		"POST /api/v1/company/join",
-		clientOnly(companyHandler.Join),
-	)
 	documentRepo := documents.NewRepository(pool)
 	documentStorage := documents.NewLocalStorage("uploads")
 	documentService := documents.NewService(

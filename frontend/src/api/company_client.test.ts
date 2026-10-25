@@ -24,22 +24,22 @@ describe("real API company and products", () => {
     await expect(companyApi.lookup(row.inn, token)).rejects.toMatchObject({ status: 404 });
     expect(mockCompany.lookup).not.toHaveBeenCalled();
   });
-  it("requires invitation instead of pretending that a found company is linked", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not found", { status: 404 })));
-    await expect(companyApi.save(token, fromApiCompany(row))).rejects.toMatchObject({ status: 400 });
-    expect(mockCompany.save).not.toHaveBeenCalled();
-  });
-  it("joins on the server before caching the company", async () => {
+  it("links an unlinked user via POST /company (backend creates or joins by INN)", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response("not found", { status: 404 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(row)));
+      .mockResolvedValueOnce(new Response(JSON.stringify(row), { status: 201 }));
     vi.stubGlobal("fetch", fetcher);
-    expect((await companyApi.save(token, fromApiCompany(row), " invitation ")).id).toBe(row.id);
-    expect(fetcher.mock.calls[1][0]).toBe("/api/v1/company/join");
-    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ code: "invitation" });
+    expect((await companyApi.save(token, fromApiCompany(row))).id).toBe(row.id);
+    expect(fetcher.mock.calls[1][0]).toBe("/api/v1/company");
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toMatchObject({ inn: row.inn });
     expect(mockCompany.save).toHaveBeenCalledOnce();
   });
-  it("does not require an invitation for the already linked company", async () => {
+  it("rejects linking to a different company", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...row, inn: "7700000016" }))));
+    await expect(companyApi.save(token, fromApiCompany(row))).rejects.toMatchObject({ status: 409 });
+    expect(mockCompany.save).not.toHaveBeenCalled();
+  });
+  it("does not post again for the already linked company", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(row)));
     vi.stubGlobal("fetch", fetcher);
     await companyApi.save(token, fromApiCompany(row));

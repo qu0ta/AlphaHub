@@ -54,17 +54,19 @@ export function StepCredit({
           error={show("purpose")}
           onChange={(purposeCode) => onChange({ purposeCode, purposeComment: purposeCode === "other" ? app.purposeComment : "" })}
         />
-        <TextAreaField
-          className="form-grid__wide"
-          label="Комментарий к цели"
-          rows={2}
-          maxLength={2000}
-          disabled={app.purposeCode !== "other"}
-          placeholder={app.purposeCode === "other" ? "Например: ремонт склада" : "Поле станет доступно после выбора цели «Другое»"}
-          value={app.purposeComment}
-          error={show("comment")}
-          onChange={(event) => onChange({ purposeComment: event.target.value })}
-        />
+        {/* Комментарий нужен только для цели «Другое» — в остальных случаях поля нет совсем */}
+        {app.purposeCode === "other" && (
+          <TextAreaField
+            className="form-grid__wide"
+            label="Комментарий к цели"
+            rows={2}
+            maxLength={2000}
+            placeholder="Например: ремонт склада"
+            value={app.purposeComment}
+            error={show("comment")}
+            onChange={(event) => onChange({ purposeComment: event.target.value })}
+          />
+        )}
       </div>
 
       <div className="estimate">
