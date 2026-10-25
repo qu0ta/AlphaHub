@@ -45,3 +45,52 @@ type ScoringResult struct {
 	FeaturesSnapshot json.RawMessage `json:"features_snapshot"`
 	CreatedAt        time.Time       `json:"created_at"`
 }
+
+type ClientOffer struct {
+	Comment               string     `json:"comment"`
+	DecisionType          string     `json:"decision_type"`
+	ID                    string     `json:"id"`
+	DecisionID            string     `json:"decision_id"`
+	ApplicationID         string     `json:"application_id"`
+	DataVersion           int        `json:"data_version"`
+	Version               int        `json:"version"`
+	AmountKopecks         int64      `json:"amount_kopecks"`
+	TermMonths            int        `json:"term_months"`
+	AnnualRateBps         int        `json:"annual_rate_bps"`
+	MonthlyPaymentKopecks int64      `json:"monthly_payment_kopecks"`
+	Status                string     `json:"status"`
+	CreatedAt             time.Time  `json:"created_at"`
+	ValidUntil            time.Time  `json:"valid_until"`
+	RespondedAt           *time.Time `json:"responded_at"`
+	RespondedByUserID     *string    `json:"responded_by_user_id"`
+}
+
+type OfferResponseRequest struct {
+	DataVersion int    `json:"data_version"`
+	Action      string `json:"action"`
+}
+
+type OfferResponse struct {
+	ApplicationID string      `json:"application_id"`
+	DataVersion   int         `json:"data_version"`
+	Status        string      `json:"status"`
+	Offer         ClientOffer `json:"offer"`
+}
+
+type InfoRequest struct {
+	ID              string     `json:"id"`
+	ApplicationID   string     `json:"application_id"`
+	CreatedByUserID *string    `json:"created_by_user_id"`
+	Description     string     `json:"description"`
+	RequiredItems   []string   `json:"required_items"`
+	Status          string     `json:"status"`
+	ResponseComment *string    `json:"response_comment"`
+	CreatedAt       time.Time  `json:"created_at"`
+	RespondedAt     *time.Time `json:"responded_at"`
+	ResolvedAt      *time.Time `json:"resolved_at"`
+}
+
+type InfoResponseRequest struct {
+	DataVersion     int    `json:"data_version"`
+	ResponseComment string `json:"response_comment"`
+}

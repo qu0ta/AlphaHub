@@ -11,7 +11,7 @@ import (
 type Repository interface {
 	Get(ctx context.Context, applicationID, userID string) (*Financials, error)
 	Update(ctx context.Context, applicationID, userID string, req UpdateRequest) (*Financials, error)
-	Confirm(ctx context.Context, applicationID, userID string) (*Financials, error)
+	Confirm(ctx context.Context, applicationID, userID string, expectedVersion int) (*Financials, error)
 }
 
 type Service struct {
@@ -71,10 +71,13 @@ func (s *Service) Update(ctx context.Context, applicationID, userID string, req 
 func (s *Service) Confirm(
 	ctx context.Context,
 	applicationID, userID string,
+	expectedVersion int,
 ) (*Financials, error) {
 	if err := validateIDs(applicationID, userID); err != nil {
 		return nil, err
 	}
-
-	return s.repo.Confirm(ctx, applicationID, userID)
+	if expectedVersion < 1 {
+		return nil, ErrVersionConflict
+	}
+	return s.repo.Confirm(ctx, applicationID, userID, expectedVersion)
 }

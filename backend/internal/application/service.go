@@ -21,6 +21,10 @@ var (
 )
 
 type Repository interface {
+	GetOffers(context.Context, string, string) ([]ClientOffer, error)
+	RespondOffer(context.Context, string, string, string, OfferResponseRequest) (*OfferResponse, error)
+	GetInfoRequests(context.Context, string, string) ([]InfoRequest, error)
+	RespondInfo(context.Context, string, string, string, InfoResponseRequest) (*Application, error)
 	GetScoring(context.Context, string, string) (*ScoringResult, error)
 	Create(ctx context.Context, userID, productCode string) (*Application, error)
 	List(ctx context.Context, userID string) ([]Application, error)
@@ -134,4 +138,49 @@ func (s *Service) GetScoring(ctx context.Context, id, userID string) (*ScoringRe
 		return nil, ErrInvalidInput
 	}
 	return s.repo.GetScoring(ctx, id, userID)
+}
+
+var (
+	ErrWorkflowConflict = errors.New("operation is not allowed in the current state")
+	ErrOfferExpired     = errors.New("offer has expired")
+)
+
+func workflowIDs(ids ...string) error {
+	for _, id := range ids {
+		if _, err := uuid.Parse(id); err != nil {
+			return ErrInvalidInput
+		}
+	}
+	return nil
+}
+func (s *Service) GetOffers(ctx context.Context, id, user string) ([]ClientOffer, error) {
+	if err := workflowIDs(id, user); err != nil {
+		return nil, err
+	}
+	return s.repo.GetOffers(ctx, id, user)
+}
+func (s *Service) RespondOffer(ctx context.Context, id, offerID, user string, req OfferResponseRequest) (*OfferResponse, error) {
+	if err := workflowIDs(id, offerID, user); err != nil {
+		return nil, err
+	}
+	if req.DataVersion < 1 || (req.Action != "ACCEPT" && req.Action != "DECLINE") {
+		return nil, ErrInvalidInput
+	}
+	return s.repo.RespondOffer(ctx, uuid.MustParse(id).String(), uuid.MustParse(offerID).String(), uuid.MustParse(user).String(), req)
+}
+func (s *Service) GetInfoRequests(ctx context.Context, id, user string) ([]InfoRequest, error) {
+	if err := workflowIDs(id, user); err != nil {
+		return nil, err
+	}
+	return s.repo.GetInfoRequests(ctx, id, user)
+}
+func (s *Service) RespondInfo(ctx context.Context, id, requestID, user string, req InfoResponseRequest) (*Application, error) {
+	if err := workflowIDs(id, requestID, user); err != nil {
+		return nil, err
+	}
+	req.ResponseComment = strings.TrimSpace(req.ResponseComment)
+	if req.DataVersion < 1 || req.ResponseComment == "" || len([]rune(req.ResponseComment)) > 2000 {
+		return nil, ErrInvalidInput
+	}
+	return s.repo.RespondInfo(ctx, id, requestID, user, req)
 }

@@ -52,3 +52,24 @@ func TestSelectReviewRouteInvalidInput(t *testing.T) {
 		}
 	}
 }
+
+func TestCalculateMonthlyPayment(t *testing.T) {
+	for _, tc := range []struct {
+		amount       int64
+		months, rate int
+		want         int64
+	}{
+		{100, 3, 0, 34}, {100000, 1, 1200, 101000}, {10000000, 12, 1200, 888488},
+	} {
+		got, err := CalculateMonthlyPayment(tc.amount, tc.months, tc.rate)
+		if err != nil || got != tc.want {
+			t.Fatalf("payment %+v: got=%d err=%v", tc, got, err)
+		}
+	}
+	if _, err := CalculateMonthlyPayment(9223372036854775807, 1, 1200); err == nil {
+		t.Fatal("overflow accepted")
+	}
+	if _, err := CalculateMonthlyPayment(100, 601, 0); err == nil {
+		t.Fatal("excessive term accepted")
+	}
+}

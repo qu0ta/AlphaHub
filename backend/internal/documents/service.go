@@ -3,8 +3,10 @@ package documents
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -22,6 +24,7 @@ type Extractor interface {
 }
 
 type Repository interface {
+	GetForDownload(context.Context, string, string, string, string) (*DownloadMetadata, error)
 	PrepareUpload(context.Context, string, string) (*UploadContext, error)
 	Save(
 		ctx context.Context,
@@ -54,6 +57,12 @@ func NewService(repo Repository, storage Storage, extractor Extractor) *Service 
 }
 
 func (s *Service) Upload(ctx context.Context, input UploadInput) (*Document, error) {
+	if input.DocumentType == "" {
+		input.DocumentType = "FINANCIAL_STATEMENT"
+	}
+	if input.DocumentType != "FINANCIAL_STATEMENT" && input.DocumentType != "SUPPORTING_DOCUMENT" {
+		return nil, ErrInvalidInput
+	}
 	if _, err := uuid.Parse(input.ApplicationID); err != nil {
 		return nil, ErrInvalidInput
 	}
@@ -80,12 +89,17 @@ func (s *Service) Upload(ctx context.Context, input UploadInput) (*Document, err
 	if err != nil {
 		return nil, err
 	}
-	extraction, err := s.extractor.ExtractFinancials(ctx, filename, input.Data)
-	if err != nil {
-		return nil, err
-	}
-	if extraction.INN != upload.INN {
-		return nil, ErrINNMismatch
+	var extraction *dsclient.ExtractFinancialsResponse
+	processingStatus := "UPLOADED"
+	if input.DocumentType == "FINANCIAL_STATEMENT" {
+		extraction, err = s.extractor.ExtractFinancials(ctx, filename, input.Data)
+		if err != nil {
+			return nil, err
+		}
+		if extraction.INN != upload.INN {
+			return nil, ErrINNMismatch
+		}
+		processingStatus = "PROCESSED"
 	}
 
 	documentID := uuid.NewString()
@@ -93,9 +107,9 @@ func (s *Service) Upload(ctx context.Context, input UploadInput) (*Document, err
 	doc := Document{
 		ID:               documentID,
 		ApplicationID:    input.ApplicationID,
-		DocumentType:     "FINANCIAL_STATEMENT",
+		DocumentType:     input.DocumentType,
 		OriginalFilename: filename,
-		ProcessingStatus: "PROCESSED",
+		ProcessingStatus: processingStatus,
 	}
 	if err := s.storage.Save(ctx, storageKey, input.Data); err != nil {
 		return nil, fmt.Errorf("storage PDF: %w", err)
@@ -120,4 +134,27 @@ func (s *Service) List(ctx context.Context, applicationID string, userID string)
 	}
 
 	return s.repo.List(ctx, applicationID, userID)
+}
+
+func (s *Service) Download(ctx context.Context, appID, docID, user, role string) (*Document, []byte, error) {
+	for _, id := range []string{appID, docID, user} {
+		if _, err := uuid.Parse(id); err != nil {
+			return nil, nil, ErrInvalidInput
+		}
+	}
+	if role != "CLIENT" && role != "BANK_EMPLOYEE" {
+		return nil, nil, ErrInvalidInput
+	}
+	metadata, err := s.repo.GetForDownload(ctx, appID, docID, user, role)
+	if err != nil {
+		return nil, nil, err
+	}
+	data, err := s.storage.Read(ctx, metadata.StorageKey)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil, ErrDocumentNotFound
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return &metadata.Document, data, nil
 }

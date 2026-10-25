@@ -23,6 +23,8 @@ type Month struct {
 type Financials struct {
 	ApplicationID                     string     `json:"application_id"`
 	DataVersion                       int        `json:"data_version"`
+	FinancialDataVersion              int        `json:"financial_data_version"`
+	IsConfirmationCurrent             bool       `json:"is_confirmation_current"`
 	DeclaredMonthlyDebtPaymentKopecks *int64     `json:"declared_monthly_debt_payment_kopecks"`
 	Financials                        []Month    `json:"financials"`
 	ConfirmedAt                       *time.Time `json:"confirmed_at"`
@@ -33,4 +35,7 @@ type UpdateRequest struct {
 	DataVersion                       int     `json:"data_version"`
 	DeclaredMonthlyDebtPaymentKopecks *int64  `json:"declared_monthly_debt_payment_kopecks"`
 	Financials                        []Month `json:"financials"`
+}
+type ConfirmRequest struct {
+	DataVersion int `json:"data_version"`
 }

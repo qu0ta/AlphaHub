@@ -28,8 +28,16 @@ type Document struct {
 }
 
 type UploadInput struct {
+	DocumentType  string
 	ApplicationID string
 	UserID        string
 	Filename      string
 	Data          []byte
+}
+
+var ErrDocumentNotFound = errors.New("document not found")
+
+type DownloadMetadata struct {
+	Document
+	StorageKey string `json:"-"`
 }

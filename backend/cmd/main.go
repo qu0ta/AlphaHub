@@ -69,6 +69,15 @@ func main() {
 		bankOnly(bankHandler.GetManual),
 	)
 
+	mux.Handle("GET /api/v1/bank/applications/{id}", bankOnly(bankHandler.GetByID))
+	mux.Handle("POST /api/v1/bank/applications/{id}/claim", bankOnly(bankHandler.Claim))
+	mux.Handle("POST /api/v1/bank/applications/{id}/decisions", bankOnly(bankHandler.Decide))
+	mux.Handle("POST /api/v1/bank/applications/{id}/info-requests", bankOnly(bankHandler.CreateInfoRequest))
+	mux.Handle("POST /api/v1/bank/applications/{id}/assignment", bankOnly(bankHandler.ChangeAssignment))
+	mux.Handle("GET /api/v1/bank/applications/page", bankOnly(bankHandler.ListPage))
+	mux.Handle("GET /api/v1/bank/decisions", bankOnly(bankHandler.MyDecisions))
+	mux.Handle("GET /api/v1/bank/archive", bankOnly(bankHandler.Archive))
+
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("GET /api/v1/auth/me", authHandler.Me)
@@ -106,6 +115,10 @@ func main() {
 	)
 
 	mux.Handle("GET /api/v1/applications/{id}/scoring", clientOnly(applicationHandler.GetScoring))
+	mux.Handle("GET /api/v1/applications/{id}/offers", clientOnly(applicationHandler.GetOffers))
+	mux.Handle("POST /api/v1/applications/{id}/offers/{offerID}/respond", clientOnly(applicationHandler.RespondOffer))
+	mux.Handle("GET /api/v1/applications/{id}/info-requests", clientOnly(applicationHandler.GetInfoRequests))
+	mux.Handle("POST /api/v1/applications/{id}/info-requests/{requestID}/respond", clientOnly(applicationHandler.RespondInfo))
 
 	companyRepo := company.NewRepository(pool)
 	companyService := company.NewService(companyRepo)
@@ -142,6 +155,8 @@ func main() {
 		dsClient,
 	)
 	documentHandler := documents.NewHandler(documentService)
+	mux.Handle("GET /api/v1/bank/applications/{id}/documents/{documentID}/download", bankOnly(documentHandler.DownloadBank))
+	mux.Handle("GET /api/v1/applications/{id}/documents/{documentID}/download", clientOnly(documentHandler.Download))
 
 	mux.Handle(
 		"POST /api/v1/applications/{id}/documents",
