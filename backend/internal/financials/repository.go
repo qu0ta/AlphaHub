@@ -16,12 +16,19 @@ type PostgresRepository struct {
 }
 
 func (r *PostgresRepository) Get(ctx context.Context, applicationID, userID string) (*Financials, error) {
-
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadOnly,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("begin financial read: %w", err)
+	}
+	defer tx.Rollback(ctx)
 	var result Financials
 	result.ApplicationID = applicationID
 	result.Financials = make([]Month, 0)
 
-	err := r.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`SELECT data_version, declared_monthly_debt_payment_kopecks
 FROM applications WHERE id = $1 AND created_by_user_id = $2`, applicationID, userID).Scan(
 		&result.DataVersion, &result.DeclaredMonthlyDebtPaymentKopecks)
@@ -33,7 +40,7 @@ FROM applications WHERE id = $1 AND created_by_user_id = $2`, applicationID, use
 	}
 
 	var financialVersion int
-	err = r.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`SELECT MAX(data_version) FROM financial_records WHERE application_id = $1
 			HAVING COUNT(*) > 0`, applicationID).Scan(&financialVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -43,7 +50,9 @@ FROM applications WHERE id = $1 AND created_by_user_id = $2`, applicationID, use
 		return nil, fmt.Errorf("get financial version: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, `
+	result.FinancialDataVersion = financialVersion
+
+	rows, err := tx.Query(ctx, `
         SELECT
             to_char(period_month, 'YYYY-MM'),
             revenue_kopecks,
@@ -87,7 +96,16 @@ FROM applications WHERE id = $1 AND created_by_user_id = $2`, applicationID, use
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate financial records: %w", err)
 	}
+	rows.Close()
 
+	result.IsConfirmationCurrent = len(result.Financials) == 6 &&
+		result.ConfirmedAt != nil &&
+		result.ConfirmedByUserID != nil &&
+		result.FinancialDataVersion == result.DataVersion
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit financial read: %w", err)
+	}
 	return &result, nil
 }
 
@@ -194,6 +212,8 @@ func (r *PostgresRepository) Update(
 	return &Financials{
 		ApplicationID:                     applicationID,
 		DataVersion:                       newVersion,
+		FinancialDataVersion:              newVersion,
+		IsConfirmationCurrent:             false,
 		DeclaredMonthlyDebtPaymentKopecks: req.DeclaredMonthlyDebtPaymentKopecks,
 		Financials:                        req.Financials,
 	}, nil
@@ -221,15 +241,15 @@ func (r *PostgresRepository) Confirm(
         FOR UPDATE
     `, applicationID, userID).Scan(&status, &appVersion)
 
-	if appVersion != expectedVersion {
-		return nil, ErrVersionConflict
-	}
-
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("lock application: %w", err)
+	}
+
+	if appVersion != expectedVersion {
+		return nil, ErrVersionConflict
 	}
 
 	if status != "DRAFT" {
