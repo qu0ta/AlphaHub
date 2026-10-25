@@ -1,6 +1,11 @@
 .venv/
 .venv-docling/
 .venv-old/
+.venv-scoring/
+/ds/benchmark_output/
+/ds/experiments/data/
+/ds/experiments/models/
+/ds/experiments/results/
 
 __pycache__/
 *.pyc
