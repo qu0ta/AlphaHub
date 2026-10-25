@@ -108,3 +108,7 @@ uploads/
 storage/
 frontend/vite.config.js
 frontend/vite.config.d.ts
+
+# Kept locally; maintained in main, excluded from backend branch.
+/frontend/
+/ds/
