@@ -46,7 +46,7 @@ function matchesStatus(app: Application, filter: StatusFilter) {
 
 /** Экран 21 «Банк — очередь ручной проверки» (+ разделы «Мои решения» и «Архив»). */
 export function QueuePage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const view = (["mine", "archive"].includes(params.get("view") ?? "") ? params.get("view") : "queue") as QueueView;
@@ -54,7 +54,7 @@ export function QueuePage() {
   const [inn, setInn] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
 
-  const resource = useResource(() => bankApi.list({ view, inn, employeeName: user?.name ?? "" }), [view, inn, user?.name]);
+  const resource = useResource(() => bankApi.list(token, { view, inn, employeeName: user?.name ?? "" }), [token, view, inn, user?.name]);
   // Новые заявки от клиентов появляются сами — обновляем список раз в 5 секунд
   usePolling(() => void resource.reload({ silent: true }), true, 5000);
 

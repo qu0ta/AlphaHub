@@ -7,6 +7,7 @@ import { Card, StateMessage } from "../../components/ui/Card";
 import { Timeline } from "../../components/ui/Timeline";
 import { usePolling, useResource } from "../../hooks/useResource";
 import { formatDateAt, formatMoney, formatRate, formatTerm } from "../../lib/format";
+import { useAuth } from "../../state/auth";
 import { useProducts } from "../../state/products";
 import { ChecksCard, CompanyCreditCard, FinanceCard, ScoringCard } from "./parts";
 
@@ -17,7 +18,8 @@ export function BankApplicationPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { products } = useProducts();
-  const resource = useResource(() => bankApi.get(id), [id]);
+  const { token, user } = useAuth();
+  const resource = useResource(() => bankApi.get(token, id, user?.name), [token, id, user?.name]);
   const app = resource.data;
   usePolling(() => void resource.reload({ silent: true }), Boolean(app && ["SUBMITTED", "IN_REVIEW", "RETENTION_REVIEW", "SIGNED"].includes(app.status)), 3000);
 

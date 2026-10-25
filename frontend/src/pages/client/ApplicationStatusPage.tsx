@@ -199,7 +199,7 @@ function InfoRequestCards({ app, token, onUpdated }: { app: Application; token: 
     if (!explanation.trim()) return;
     setSending(true);
     try {
-      onUpdated(await applicationsApi.respondToInfoRequest(token, app.id, { fileName: file?.name ?? null, explanation: explanation.trim() }));
+      onUpdated(await applicationsApi.respondToInfoRequest(token, app.id, { file, explanation: explanation.trim() }));
     } catch {
       setError("Не удалось отправить данные. Повторите попытку.");
     } finally {

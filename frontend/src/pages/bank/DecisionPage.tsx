@@ -1,7 +1,7 @@
 import { ArrowRight, Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { bankApi } from "../../api/client";
+import { ApiError, bankApi } from "../../api/client";
 import { Page } from "../../components/layout/Page";
 import { StatusBadge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -57,10 +57,10 @@ const ACTION_ORDER: DecisionType[] = ["APPROVE", "REQUEST_DATA", "REJECT"];
 
 export function DecisionPage() {
   const { id = "" } = useParams();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
   const { products } = useProducts();
-  const resource = useResource(() => bankApi.get(id), [id]);
+  const resource = useResource(() => bankApi.get(token, id, user?.name), [token, id, user?.name]);
   const app = resource.data;
   const product = products.find((item) => item.code === app?.productCode);
 
@@ -124,10 +124,11 @@ export function DecisionPage() {
     if (action === "APPROVE" && conditionsInvalid) return;
     setSending(true);
     try {
-      await bankApi.decide(app.id, { type: action, comment: comment.trim(), employeeName: user?.name ?? "Сотрудник банка" }, action === "APPROVE" ? { amount: amount!, term: term!, rate: rateNumber } : undefined);
+      await bankApi.decide(token, app.id, { type: action, comment: comment.trim(), employeeName: user?.name ?? "Сотрудник банка" }, action === "APPROVE" ? { amount: amount!, term: term!, rate: rateNumber } : undefined);
       navigate(`/bank/applications/${app.id}`, { replace: true });
-    } catch {
-      setError("Не удалось сохранить решение. Повторите попытку.");
+    } catch (reason) {
+      // Бэкенд объясняет отказ текстом (например, заявку уже взял другой сотрудник)
+      setError(reason instanceof ApiError && reason.serverText ? reason.serverText : "Не удалось сохранить решение. Повторите попытку.");
       setSending(false);
     }
   };
