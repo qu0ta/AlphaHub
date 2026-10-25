@@ -1,0 +1,14 @@
+{
+  "samples": 6000,
+  "seeds": [42, 43, 44],
+  "economics": {
+    "net_yield": 0.08,
+    "lgd": 0.45,
+    "manual_review_cost_kopecks": 100000
+  },
+  "scenarios": {
+    "base": {"observation_noise": 0.08},
+    "high_noise": {"observation_noise": 0.28, "volatility_multiplier": 1.8},
+    "stress": {"inflow_multiplier": 0.82, "expense_multiplier": 1.22, "risk_shift": 0.65}
+  }
+}
