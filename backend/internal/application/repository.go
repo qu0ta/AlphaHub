@@ -312,17 +312,32 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 	if err := r.scoreSubmission(ctx, tx, current, submittedAt); err != nil {
 		return nil, err
 	}
+	var score int
+	err = tx.QueryRow(ctx,
+		`SELECT score FROM scoring_results WHERE application_id = $1 AND data_version = $2 ORDER BY created_at DESC, id DESC LIMIT 1`,
+		id, current.DataVersion).Scan(&score)
+	if err != nil {
+		return nil, fmt.Errorf("read submission score: %w", err)
+	}
 
+	route, err := SelectReviewRoute(score, 40, 70)
+	if err != nil {
+		return nil, err
+	}
+	nextStatus := "IN_REVIEW"
+	if route == RouteManual {
+		nextStatus = "MANUAL"
+	}
 	const updateQuery = `
 		UPDATE applications
-		SET	status = 'SUBMITTED',
+		SET	status = $4,
 			submitted_at = $3,
 			updated_at = now()
 		WHERE id = $1
 		  AND created_by_user_id = $2
 		  AND status = 'DRAFT'
 		RETURNING ` + applicationColumns
-	submitted, err := scanApplication(tx.QueryRow(ctx, updateQuery, id, userID, submittedAt))
+	submitted, err := scanApplication(tx.QueryRow(ctx, updateQuery, id, userID, submittedAt, nextStatus))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotDraft
 	}
@@ -330,27 +345,48 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 		return nil, fmt.Errorf("submit application: %w", err)
 	}
 
-	_, err = tx.Exec(ctx, `
-		INSERT INTO status_history (
+	transitions := []struct {
+		from   string
+		to     string
+		reason string
+	}{
+		{
+			from:   "DRAFT",
+			to:     "SUBMITTED",
+			reason: "Application submitted by client",
+		},
+		{
+			from:   "SUBMITTED",
+			to:     "IN_REVIEW",
+			reason: "Financial scoring completed",
+		},
+	}
+
+	if nextStatus == "MANUAL" {
+		transitions = append(transitions, struct {
+			from   string
+			to     string
+			reason string
+		}{
+			from:   "IN_REVIEW",
+			to:     "MANUAL",
+			reason: "Score is within the manual review range",
+		})
+	}
+	for _, transition := range transitions {
+		_, err := tx.Exec(ctx,
+			`INSERT INTO status_history (
 			id,
 			application_id,
 			changed_by_user_id,
 			from_status,
 			to_status,
 			reason
-		)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`,
-		uuid.NewString(),
-		id,
-		userID,
-		"DRAFT",
-		"SUBMITTED",
-		"Application submitted by client",
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("insert status history: %w", err)
+		) VALUES ($1, $2, $3, $4, $5, $6)`,
+			uuid.NewString(), id, userID, transition.from, transition.to, transition.reason)
+		if err != nil {
+			return nil, fmt.Errorf("insert status history: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -360,8 +396,6 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 	return submitted, nil
 }
 
-// The draft lock keeps the confirmed financial version and the scoring snapshot consistent.
-// DS is bounded by its HTTP timeout; failure rolls back submission and its score together.
 func (r *PostgresRepository) scoreSubmission(ctx context.Context, tx pgx.Tx, app *Application, submittedAt time.Time) error {
 	input := dsclient.ScoringInput{
 		AmountKopecks:   *app.RequestedAmountKopecks,
