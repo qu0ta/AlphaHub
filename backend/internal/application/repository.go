@@ -269,10 +269,11 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 	}
 
 	var (
-		minAmount int64
-		maxAmount int64
-		minTerm   int
-		maxTerm   int
+		minAmount  int64
+		maxAmount  int64
+		minTerm    int
+		maxTerm    int
+		annualRate int
 	)
 
 	err = tx.QueryRow(ctx, `
@@ -280,15 +281,18 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 			min_amount_kopecks,
 			max_amount_kopecks,
 			min_term_months,
-			max_term_months
+			max_term_months,
+			base_annual_rate_bps
 		FROM products
 		WHERE code = $1
 		  AND is_active = true
+		FOR SHARE
 	`, current.ProductCode).Scan(
 		&minAmount,
 		&maxAmount,
 		&minTerm,
 		&maxTerm,
+		&annualRate,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrProductMissing
@@ -313,9 +317,10 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 		return nil, err
 	}
 	var score int
+	var scoringID string
 	err = tx.QueryRow(ctx,
-		`SELECT score FROM scoring_results WHERE application_id = $1 AND data_version = $2 ORDER BY created_at DESC, id DESC LIMIT 1`,
-		id, current.DataVersion).Scan(&score)
+		`SELECT id,score FROM scoring_results WHERE application_id = $1 AND data_version = $2 ORDER BY created_at DESC, id DESC LIMIT 1`,
+		id, current.DataVersion).Scan(&scoringID, &score)
 	if err != nil {
 		return nil, fmt.Errorf("read submission score: %w", err)
 	}
@@ -324,15 +329,24 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 	if err != nil {
 		return nil, err
 	}
-	nextStatus := "IN_REVIEW"
-	if route == RouteManual {
-		nextStatus = "MANUAL"
+	nextStatus := "MANUAL"
+	finalReason := "Score is within the manual review range"
+	if route != RouteManual {
+		nextStatus, err = r.saveAutomaticDecision(ctx, tx, current, scoringID, route, annualRate)
+		if err != nil {
+			return nil, err
+		}
+		if route == RouteReject {
+			finalReason = "Automatic rejection: score below 40"
+		} else {
+			finalReason = "Automatic offer: score at least 70 and product limits satisfied"
+		}
 	}
 	const updateQuery = `
 		UPDATE applications
 		SET	status = $4,
 			submitted_at = $3,
-			updated_at = now()
+			updated_at = clock_timestamp()
 		WHERE id = $1
 		  AND created_by_user_id = $2
 		  AND status = 'DRAFT'
@@ -362,18 +376,20 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 		},
 	}
 
-	if nextStatus == "MANUAL" {
-		transitions = append(transitions, struct {
-			from   string
-			to     string
-			reason string
-		}{
-			from:   "IN_REVIEW",
-			to:     "MANUAL",
-			reason: "Score is within the manual review range",
-		})
+	transitions = append(transitions, struct {
+		from   string
+		to     string
+		reason string
+	}{from: "IN_REVIEW", to: nextStatus, reason: finalReason})
+	var historyAt time.Time
+	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&historyAt); err != nil {
+		return nil, err
 	}
-	for _, transition := range transitions {
+	for index, transition := range transitions {
+		var actor *string
+		if transition.from == "DRAFT" {
+			actor = &userID
+		}
 		_, err := tx.Exec(ctx,
 			`INSERT INTO status_history (
 			id,
@@ -381,9 +397,9 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 			changed_by_user_id,
 			from_status,
 			to_status,
-			reason
-		) VALUES ($1, $2, $3, $4, $5, $6)`,
-			uuid.NewString(), id, userID, transition.from, transition.to, transition.reason)
+			reason,created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			uuid.NewString(), id, actor, transition.from, transition.to, transition.reason, historyAt.Add(time.Duration(index)*time.Microsecond))
 		if err != nil {
 			return nil, fmt.Errorf("insert status history: %w", err)
 		}
@@ -395,7 +411,6 @@ func (r *PostgresRepository) Submit(ctx context.Context, id, userID string) (*Ap
 
 	return submitted, nil
 }
-
 func (r *PostgresRepository) scoreSubmission(ctx context.Context, tx pgx.Tx, app *Application, submittedAt time.Time) error {
 	input := dsclient.ScoringInput{
 		AmountKopecks:   *app.RequestedAmountKopecks,
@@ -414,7 +429,7 @@ func (r *PostgresRepository) scoreSubmission(ctx context.Context, tx pgx.Tx, app
 	}
 	input.DeclaredMonthlyDebtPaymentKopecks = *debt
 	rows, err := tx.Query(ctx, `SELECT to_char(period_month,'YYYY-MM'), revenue_kopecks,
- operating_inflow_kopecks, operating_outflow_kopecks, tax_outflow_kopecks, confirmed_at IS NOT NULL
+ operating_inflow_kopecks, operating_outflow_kopecks, tax_outflow_kopecks, confirmed_at IS NOT NULL AND confirmed_by_user_id IS NOT NULL
  FROM financial_records WHERE application_id=$1 AND data_version=$2 ORDER BY period_month`, app.ID, app.DataVersion)
 	if err != nil {
 		return fmt.Errorf("load scoring financials: %w", err)
@@ -463,12 +478,11 @@ func (r *PostgresRepository) scoreSubmission(ctx context.Context, tx pgx.Tx, app
 	}
 	return nil
 }
-
 func (r *PostgresRepository) GetScoring(ctx context.Context, id, userID string) (*ScoringResult, error) {
 	var result ScoringResult
 	err := r.pool.QueryRow(ctx, `SELECT s.data_version,s.score,s.model_version,s.explanation,s.features_snapshot,s.created_at
  FROM scoring_results s JOIN applications a ON a.id=s.application_id
- WHERE a.id=$1 AND a.created_by_user_id=$2 ORDER BY s.created_at DESC,s.id DESC LIMIT 1`, id, userID).Scan(
+ WHERE a.id=$1 AND a.created_by_user_id=$2 AND s.data_version=a.data_version ORDER BY s.created_at DESC,s.id DESC LIMIT 1`, id, userID).Scan(
 		&result.DataVersion, &result.Score, &result.ModelVersion, &result.Explanation, &result.FeaturesSnapshot, &result.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -477,4 +491,216 @@ func (r *PostgresRepository) GetScoring(ctx context.Context, id, userID string) 
 		return nil, fmt.Errorf("read scoring: %w", err)
 	}
 	return &result, nil
+}
+func (r *PostgresRepository) saveAutomaticDecision(ctx context.Context, tx pgx.Tx, app *Application, scoringID string, route ReviewRoute, annualRate int) (string, error) {
+	decisionID := uuid.NewString()
+	status, kind, reason, comment := "REJECTED", "REJECT", "LOW_SCORE", "Score is below the automatic rejection threshold"
+	var payment int64
+	var err error
+	if route == RouteOffer {
+		payment, err = CalculateMonthlyPayment(*app.RequestedAmountKopecks, *app.RequestedTermMonths, annualRate)
+		if err != nil {
+			return "", ErrIncompleteApplication
+		}
+		status, kind, reason, comment = "OFFERED", "APPROVE", "HIGH_SCORE", "Score and active product limits allow an automatic offer"
+	} else if route != RouteReject {
+		return "", fmt.Errorf("unexpected automatic route %q", route)
+	}
+	var createdAt time.Time
+	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&createdAt); err != nil {
+		return "", fmt.Errorf("automatic decision time: %w", err)
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO decisions(id,application_id,scoring_id,decided_by_user_id,data_version,decision_type,decision_source,reason_code,comment,policy_version,created_at)
+ VALUES ($1,$2,$3,NULL,$4,$5,'AUTO',$6,$7,'score-routing-v1',$8)`, decisionID, app.ID, scoringID, app.DataVersion, kind, reason, comment, createdAt)
+	if err != nil {
+		return "", fmt.Errorf("save automatic decision: %w", err)
+	}
+	if route == RouteOffer {
+		_, err = tx.Exec(ctx, `INSERT INTO offers(id,decision_id,version,amount_kopecks,term_months,annual_rate_bps,monthly_payment_kopecks,status,created_at,valid_until)
+   VALUES ($1,$2,1,$3,$4,$5,$6,'PENDING',$7,$8)`, uuid.NewString(), decisionID, *app.RequestedAmountKopecks, *app.RequestedTermMonths, annualRate, payment, createdAt, createdAt.Add(AutomaticOfferValidity))
+		if err != nil {
+			return "", fmt.Errorf("save automatic offer: %w", err)
+		}
+	}
+	return status, nil
+}
+
+func (r *PostgresRepository) lockOwnedApplication(ctx context.Context, tx pgx.Tx, id, user string) (*Application, error) {
+	app, err := scanApplication(tx.QueryRow(ctx, `SELECT `+applicationColumns+` FROM applications WHERE id=$1 AND created_by_user_id=$2 FOR UPDATE`, id, user))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return app, err
+}
+
+func (r *PostgresRepository) GetOffers(ctx context.Context, id, user string) ([]ClientOffer, error) {
+	var data []byte
+	err := r.pool.QueryRow(ctx, `SELECT COALESCE((SELECT jsonb_agg(item ORDER BY item->>'created_at' DESC,item->>'id' DESC) FROM (
+  SELECT to_jsonb(o)||jsonb_build_object('application_id',d.application_id,'data_version',d.data_version,'comment',d.comment,'decision_type',d.decision_type,
+   'status',CASE WHEN o.status='PENDING' AND o.valid_until<=clock_timestamp() THEN 'EXPIRED' ELSE o.status END) item
+  FROM offers o JOIN decisions d ON d.id=o.decision_id WHERE d.application_id=a.id
+ ) entries),'[]'::jsonb) FROM applications a WHERE a.id=$1 AND a.created_by_user_id=$2`, id, user).Scan(&data)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read client offers: %w", err)
+	}
+	var offers []ClientOffer
+	err = json.Unmarshal(data, &offers)
+	return offers, err
+}
+
+func (r *PostgresRepository) RespondOffer(ctx context.Context, id, offerID, user string, req OfferResponseRequest) (*OfferResponse, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	app, err := r.lockOwnedApplication(ctx, tx, id, user)
+	if err != nil {
+		return nil, err
+	}
+	if app.DataVersion != req.DataVersion {
+		return nil, ErrVersionConflict
+	}
+	var data []byte
+	err = tx.QueryRow(ctx, `SELECT to_jsonb(o)||jsonb_build_object('application_id',d.application_id,'data_version',d.data_version,'comment',d.comment,'decision_type',d.decision_type)
+ FROM offers o JOIN decisions d ON d.id=o.decision_id WHERE o.id=$1 AND d.application_id=$2 FOR UPDATE OF o`, offerID, id).Scan(&data)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var offer ClientOffer
+	if err = json.Unmarshal(data, &offer); err != nil {
+		return nil, err
+	}
+	if offer.DataVersion != app.DataVersion {
+		return nil, ErrVersionConflict
+	}
+	// Identical retries after a committed response are safe; opposite responses conflict.
+	accepted := req.Action == "ACCEPT" && offer.Status == "ACCEPTED" && app.Status == "ACCEPTED" && app.AcceptedOfferID != nil && *app.AcceptedOfferID == offerID
+	declined := req.Action == "DECLINE" && offer.Status == "DECLINED" && app.Status == "OFFER_DECLINED"
+	if accepted || declined {
+		if err = tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return &OfferResponse{id, app.DataVersion, app.Status, offer}, nil
+	}
+	if app.Status != "OFFERED" || offer.Status != "PENDING" || app.AcceptedOfferID != nil {
+		return nil, ErrWorkflowConflict
+	}
+	var now time.Time
+	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return nil, err
+	}
+	if !offer.ValidUntil.After(now) {
+		return nil, ErrOfferExpired
+	}
+	nextStatus, offerStatus := "OFFER_DECLINED", "DECLINED"
+	var selected *string
+	if req.Action == "ACCEPT" {
+		nextStatus, offerStatus = "ACCEPTED", "ACCEPTED"
+		selected = &offerID
+	}
+	_, err = tx.Exec(ctx, `UPDATE offers SET status=$2,responded_at=$3,responded_by_user_id=$4 WHERE id=$1`, offerID, offerStatus, now, user)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE offers o SET status='WITHDRAWN' FROM decisions d WHERE d.id=o.decision_id AND d.application_id=$1 AND o.id<>$2 AND o.status='PENDING'`, id, offerID)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE applications SET status=$2,accepted_offer_id=$3,updated_at=$4 WHERE id=$1`, id, nextStatus, selected, now)
+	if err != nil {
+		return nil, err
+	}
+	if err = writeWorkflowHistory(ctx, tx, id, user, app.Status, nextStatus, "Client "+req.Action+" offer "+offerID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	offer.Status = offerStatus
+	offer.RespondedAt = &now
+	offer.RespondedByUserID = &user
+	return &OfferResponse{id, app.DataVersion, nextStatus, offer}, nil
+}
+
+func (r *PostgresRepository) GetInfoRequests(ctx context.Context, id, user string) ([]InfoRequest, error) {
+	var data []byte
+	err := r.pool.QueryRow(ctx, `SELECT COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i.created_at DESC,i.id DESC)
+ FROM info_requests i WHERE i.application_id=a.id),'[]'::jsonb) FROM applications a WHERE a.id=$1 AND a.created_by_user_id=$2`, id, user).Scan(&data)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var requests []InfoRequest
+	err = json.Unmarshal(data, &requests)
+	return requests, err
+}
+
+func (r *PostgresRepository) RespondInfo(ctx context.Context, id, requestID, user string, req InfoResponseRequest) (*Application, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	app, err := r.lockOwnedApplication(ctx, tx, id, user)
+	if err != nil {
+		return nil, err
+	}
+	if app.DataVersion != req.DataVersion {
+		return nil, ErrVersionConflict
+	}
+	var status string
+	err = tx.QueryRow(ctx, `SELECT status FROM info_requests WHERE id=$1 AND application_id=$2 FOR UPDATE`, requestID, id).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if app.Status != "NEEDS_INFO" || status != "OPEN" || app.SubmittedAt == nil {
+		return nil, ErrWorkflowConflict
+	}
+	if app.CompanyID == nil || app.RequestedAmountKopecks == nil || app.RequestedTermMonths == nil {
+		return nil, ErrIncompleteApplication
+	}
+	var allowed bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND company_id=$2)`, user, *app.CompanyID).Scan(&allowed)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, ErrCompanyAccessDenied
+	}
+	if err = r.scoreSubmission(ctx, tx, app, *app.SubmittedAt); err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE info_requests SET status='RESPONDED',response_comment=$2,responded_at=clock_timestamp() WHERE id=$1`, requestID, req.ResponseComment)
+	if err != nil {
+		return nil, err
+	}
+	result, err := scanApplication(tx.QueryRow(ctx, `UPDATE applications SET status='MANUAL',updated_at=clock_timestamp() WHERE id=$1 RETURNING `+applicationColumns, id))
+	if err != nil {
+		return nil, err
+	}
+	if err = writeWorkflowHistory(ctx, tx, id, user, "NEEDS_INFO", "MANUAL", "Client responded to information request "+requestID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func writeWorkflowHistory(ctx context.Context, tx pgx.Tx, id, user, from, to, reason string) error {
+	_, err := tx.Exec(ctx, `INSERT INTO status_history(id,application_id,changed_by_user_id,from_status,to_status,reason,created_at)
+ VALUES ($1,$2,$3,$4,$5,$6,clock_timestamp())`, uuid.NewString(), id, user, from, to, reason)
+	return err
 }

@@ -53,6 +53,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrFinancialsUnconfirmed), errors.Is(err, ErrInvalidScoringPeriod):
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+	case errors.Is(err, ErrWorkflowConflict), errors.Is(err, ErrOfferExpired):
+		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, ErrInvalidInput):
 		http.Error(w, "Invalid application input", http.StatusBadRequest)
 
@@ -175,4 +177,67 @@ func (h *Handler) GetScoring(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) GetOffers(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	user, ok := userIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.service.GetOffers(r.Context(), r.PathValue("id"), user)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, 200, result)
+}
+func (h *Handler) RespondOffer(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	user, ok := userIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+	var req OfferResponseRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		http.Error(w, "Invalid request body", 400)
+		return
+	}
+	result, err := h.service.RespondOffer(r.Context(), r.PathValue("id"), r.PathValue("offerID"), user, req)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, 200, result)
+}
+func (h *Handler) GetInfoRequests(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	user, ok := userIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.service.GetInfoRequests(r.Context(), r.PathValue("id"), user)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, 200, result)
+}
+func (h *Handler) RespondInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	user, ok := userIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+	var req InfoResponseRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		http.Error(w, "Invalid request body", 400)
+		return
+	}
+	result, err := h.service.RespondInfo(r.Context(), r.PathValue("id"), r.PathValue("requestID"), user, req)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, 200, result)
 }
