@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/qu0ta/AlphaHub/internal/application"
 	"github.com/qu0ta/AlphaHub/internal/auth"
+	"github.com/qu0ta/AlphaHub/internal/bank"
 	"github.com/qu0ta/AlphaHub/internal/company"
 	"github.com/qu0ta/AlphaHub/internal/documents"
 	"github.com/qu0ta/AlphaHub/internal/dsclient"
@@ -53,6 +54,20 @@ func main() {
 			auth.RequireRole("CLIENT")(handler),
 		)
 	}
+	bankOnly := func(handler http.HandlerFunc) http.Handler {
+		return authHandler.RequireAuth(
+			auth.RequireRole("BANK_EMPLOYEE")(handler),
+		)
+	}
+
+	bankRepo := bank.NewPostgresRepository(pool)
+	bankService := bank.NewService(bankRepo)
+	bankHandler := bank.NewHandler(bankService)
+
+	mux.Handle(
+		"GET /api/v1/bank/applications",
+		bankOnly(bankHandler.GetManual),
+	)
 
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
