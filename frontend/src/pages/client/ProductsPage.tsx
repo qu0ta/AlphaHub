@@ -55,6 +55,10 @@ export function ProductsPage() {
         <Card>
           <StateMessage title="Не удалось загрузить продукты" action={<Button onClick={() => void retry()}>Повторить</Button>} />
         </Card>
+      ) : products.length === 0 ? (
+        <Card>
+          <StateMessage title="Продукты временно недоступны" text="Список кредитных продуктов пока пуст. Попробуйте позже." action={<Button onClick={() => void retry()}>Обновить</Button>} />
+        </Card>
       ) : (
         <div className="grid-2">
           {products.map((product) => (

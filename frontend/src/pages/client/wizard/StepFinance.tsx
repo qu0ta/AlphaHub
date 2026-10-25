@@ -1,4 +1,4 @@
-import { LoaderCircle, Trash2 } from "lucide-react";
+import { LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, applicationsApi, type ApplicationPatch } from "../../../api/client";
 import { Badge } from "../../../components/ui/Badge";
@@ -60,6 +60,7 @@ export function StepFinance({
     setUploading(true);
     try {
       onReplace(await applicationsApi.uploadFinancialDocument(token, app.id, file));
+      setReplacing(false);
     } catch (reason) {
       setUploadError(reason instanceof ApiError ? reason.serverText : "Не удалось загрузить файл");
     } finally {
@@ -67,9 +68,9 @@ export function StepFinance({
     }
   };
 
-  const remove = async () => {
-    onReplace(await applicationsApi.removeFinancialDocument(token, app.id));
-  };
+  // «Заменить»: снова показываем зону загрузки. Новый PDF перезапишет финансы на бэкенде,
+  // а до загрузки остаются прежний файл и данные (удаления документа в API нет).
+  const [replacing, setReplacing] = useState(false);
 
   const updateCell = (period: string, field: FinanceField, value: number | null) => {
     const financials = (app.financials ?? []).map((row): FinanceMonth => (row.period === period ? { ...row, [field]: value } : row));
@@ -84,7 +85,7 @@ export function StepFinance({
     <Card>
       <CardHeader title="Финансы и документы" subtitle="Загрузите финансовую сводку за 6 полных месяцев." />
 
-      {!doc ? (
+      {!doc || replacing ? (
         <UploadZone
           hint="Один обязательный текстовый PDF, до 10 МБ"
           title={uploading ? "Загружаем файл…" : undefined}
@@ -108,8 +109,8 @@ export function StepFinance({
           }
           actions={
             !processing && (
-              <button type="button" className="text-link" onClick={() => void remove()}>
-                <Trash2 size={16} aria-hidden="true" />
+              <button type="button" className="text-link" onClick={() => setReplacing(true)}>
+                <RefreshCw size={16} aria-hidden="true" />
                 Заменить
               </button>
             )

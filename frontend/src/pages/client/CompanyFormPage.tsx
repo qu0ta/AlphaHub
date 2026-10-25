@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, LoaderCircle, LockKeyhole, SearchX, ServerCrash } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { API_MODE, ApiError, companyApi } from "../../api/client";
+import { ApiError, companyApi } from "../../api/client";
 import { Page } from "../../components/layout/Page";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -24,7 +24,8 @@ type Lookup =
   | { state: "notFound" }
   | { state: "unavailable" };
 
-const lookupInnError = (value: string) => API_MODE === "mock" ? innError(value) : (/^(?:[0-9]{10}|[0-9]{12})$/.test(value) ? null : "Введите 10 или 12 цифр ИНН");
+// Проверяем только формат: синтетические ИНН демо-компаний не проходят контрольную сумму
+const lookupInnError = (value: string) => (/^(?:[0-9]{10}|[0-9]{12})$/.test(value) ? null : "Введите 10 или 12 цифр ИНН");
 
 const POSITION_OPTIONS = (Object.keys(POSITION_LABELS) as RepresentativePosition[]).map((value) => ({ value, label: POSITION_LABELS[value] }));
 
@@ -106,7 +107,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
   };
 
   const found = lookup.state === "found" ? lookup.company : null;
-  const tooYoung = API_MODE === "mock" && found ? isTooYoung(found.registrationDate) : false;
+  const tooYoung = found ? isTooYoung(found.registrationDate) : false;
   const nameError = touched && name.trim().split(/\s+/).length < 2 ? "Укажите ФИО полностью" : null;
   const positionOtherError = touched && position === "other" && !positionOther.trim() ? "Укажите должность" : null;
   const innFieldError = lookup.state === "invalid" ? lookup.message : touched && !found ? "Найдите компанию по ИНН" : null;
@@ -136,7 +137,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
     <Page
       crumbs={[{ label: mode === "onboarding" ? "Данные компании" : "Компания и документы", to: mode === "edit" ? "/company" : undefined }, ...(mode === "edit" ? [{ label: "Изменение данных" }] : [])]}
       title={mode === "onboarding" ? "Расскажите о компании" : "Изменение данных компании"}
-      subtitle={API_MODE === "api" ? "Найдите компанию в базе сервиса по ИНН." : "Найдём данные в реестре по ИНН."}
+      subtitle="Найдите компанию в базе сервиса по ИНН."
     >
       <div className="columns">
         <Card as="div">
@@ -197,7 +198,7 @@ export function CompanyFormPage({ mode }: { mode: "onboarding" | "edit" }) {
         <div className="columns__side">
           <InfoBlock title="Зачем нужны данные компании">Они помогут подготовить документы и связать будущие заявки с вашим бизнесом.</InfoBlock>
           <InfoBlock title="Откуда берутся данные" icon={<LockKeyhole size={20} />}>
-            {API_MODE === "api" ? "Реквизиты загружаются из базы сервиса. Изменить их вручную нельзя." : "Название, форму бизнеса, дату регистрации и ОКВЭД мы получаем из демонстрационного реестра."}
+            Реквизиты загружаются из базы сервиса (реестр ЕГРЮЛ/ЕГРИП смоделирован). Изменить их вручную нельзя.
           </InfoBlock>
         </div>
       </div>

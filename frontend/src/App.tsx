@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { resetDb } from "./api/mock/db";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Button } from "./components/ui/Button";
 import { LoginPage } from "./pages/auth/LoginPage";
@@ -60,8 +59,6 @@ export function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to={afterLogin(user.role)} replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to={afterLogin(user.role)} replace /> : <RegisterPage />} />
-      {/* Сброс демо-данных: открыть /demo-reset перед показом жюри */}
-      <Route path="/demo-reset" element={<DemoReset />} />
 
       <Route
         element={
@@ -86,31 +83,5 @@ export function App() {
 
       <Route path="*" element={<Navigate to={user ? homeFor(user.role) : "/login"} replace />} />
     </Routes>
-  );
-}
-
-function DemoReset() {
-  const { logout } = useAuth();
-  return (
-    <div className="app-loading">
-      <div className="session-error">
-        <h1>Сбросить демо-данные?</h1>
-        <p className="muted">Все заявки, компании и пользователи вернутся к исходному состоянию.</p>
-        <div className="actions-row actions-row--center">
-          <Button
-            onClick={() => {
-              resetDb();
-              logout();
-              window.location.assign("/login");
-            }}
-          >
-            Сбросить
-          </Button>
-          <Button variant="secondary" onClick={() => window.history.back()}>
-            Отмена
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }

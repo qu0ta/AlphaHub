@@ -1,21 +1,31 @@
 /**
  * Единая точка доступа к данным для страниц.
  *
- * Страницы вызывают только функции отсюда и не знают, откуда пришли данные:
- * из настоящего бэкенда (VITE_API_MODE=api) или из мока в браузере.
- * Когда бэкенд реализует очередной метод, меняется только этот файл.
+ * Все данные — с Go-бэкенда (/api/v1). Страницы вызывают только функции
+ * отсюда и не знают о форматах API: перевод копеек в рубли, статусов,
+ * предложений и т. п. собран в backend.ts.
  *
- * С backend связаны: авторизация, продукты, компания, заявки (черновик, PDF и
- * извлечённые финансы, подтверждение, отправка и скоринг), предложения, запросы
- * дополнительных данных и кабинет банка. Перевод форматов бэкенда — в backend.ts.
- * В моке остаются только поля интерфейса, которых нет на бэкенде (должность
- * представителя, документы компании), и симуляция подписания и выдачи.
+ * В браузере (lib/localStore.ts) хранятся лишь поля интерфейса, которых нет
+ * в API: должность представителя и отметки «исправлено вручную» в таблице финансов.
+ * Подписание и выдача кредита на бэкенде не реализованы — после принятия
+ * предложения их шаги показываются по времени (см. mapStatus в backend.ts).
  */
-import type { Application, BankDecision, Company, CompanyDocument, DeclineReason, FinanceMonth, Product, RegistryCompany, Role, User } from "../types";
 import { PURPOSE_LABELS } from "../lib/labels";
-import { fromApiCompany, fromApiFinancials, toApiFinancials, type ApiCompany, type ApiFinancials } from "./contracts";
-import { API_MODE, ApiError, request } from "./http";
+import { localUi } from "../lib/localStore";
+import type {
+  Application,
+  BankDecision,
+  Company,
+  DeclineReason,
+  FinanceMonth,
+  FinancialDocument,
+  Product,
+  RegistryCompany,
+  Role,
+  User,
+} from "../types";
 import {
+  blankApplication,
   bps,
   clientDecision,
   clientHistory,
@@ -24,7 +34,7 @@ import {
   fromQueueRow,
   kopecks,
   mapStatus,
-  numberFromId,
+  parsePurpose,
   toInfoRequest,
   toOffers,
   type BackendApplication,
@@ -35,28 +45,24 @@ import {
   type BankQueueRow,
   type Page as BackendPage,
 } from "./backend";
-import {
-  MOCK_PRODUCTS,
-  mockApplications,
-  mockAuth,
-  mockBank,
-  mockCompany,
-  userIdFromToken,
-  type ApplicationPatch,
-  type QueueView,
-} from "./mock/server";
+import { fromApiCompany, fromApiFinancials, toApiFinancials, type ApiCompany, type ApiFinancials } from "./contracts";
+import { ApiError, request } from "./http";
 
-export { ApiError, API_MODE };
-export type { ApplicationPatch, QueueView };
+export { ApiError };
+
+/** Изменения черновика из мастера заявки. */
+export type ApplicationPatch = Partial<
+  Pick<Application, "amount" | "term" | "purposeCode" | "purposeComment" | "debtPayment" | "financials" | "editedCells" | "dataConfirmed">
+>;
+
+export type QueueView = "queue" | "mine" | "archive";
 
 /**
- * ID пользователя из токена — нужен моку, чтобы хранить данные по пользователю.
- * В режиме api достаём claim `sub` из JWT. Подпись здесь не проверяется:
- * это только ключ для мок-данных, доступом управляет бэкенд.
+ * ID пользователя из JWT (claim `sub`). Подпись здесь не проверяется —
+ * это только ключ для локальных полей интерфейса, доступом управляет бэкенд.
  */
 function currentUserId(token: string | null): string {
   if (!token) throw new ApiError(401, "Bearer token is required");
-  if (token.startsWith("mock.")) return userIdFromToken(token);
   try {
     const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as { sub?: string };
     if (payload.sub) return payload.sub;
@@ -65,6 +71,9 @@ function currentUserId(token: string | null): string {
   }
   throw new ApiError(401, "Invalid user ID");
 }
+
+const auth = (token: string | null) => ({ token: token ?? undefined });
+const isNotFound = (reason: unknown) => reason instanceof ApiError && reason.status === 404;
 
 /* ---------- Авторизация ---------- */
 
@@ -86,26 +95,17 @@ const toUser = (user: ApiUser): User => ({ id: user.id, name: user.fullName, ema
 
 export const authApi = {
   async login(email: string, password: string): Promise<{ token: string; user: User }> {
-    if (API_MODE === "mock") return mockAuth.login(email, password);
-    const session = await request<LoginResponse>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
+    const session = await request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
     const user = await request<ApiUser>("/auth/me", { token: session.access_token });
     return { token: session.access_token, user: toUser(user) };
   },
 
   async register(name: string, email: string, password: string): Promise<User> {
-    if (API_MODE === "mock") return mockAuth.register(name, email);
-    const user = await request<ApiUser>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ fullName: name, email, password }),
-    });
+    const user = await request<ApiUser>("/auth/register", { method: "POST", body: JSON.stringify({ fullName: name, email, password }) });
     return toUser(user);
   },
 
   async me(token: string): Promise<User> {
-    if (API_MODE === "mock") return mockAuth.me(token);
     return toUser(await request<ApiUser>("/auth/me", { token }));
   },
 };
@@ -128,7 +128,6 @@ interface ApiProduct {
 
 export const productsApi = {
   async list(): Promise<Product[]> {
-    if (API_MODE === "mock") return structuredClone(MOCK_PRODUCTS);
     const rows = await request<ApiProduct[]>("/products");
     return rows.map((row) => ({
       code: row.code,
@@ -147,57 +146,55 @@ export const productsApi = {
 
 /* ---------- Компания ---------- */
 
-type FileMeta = { name: string; size: number; type: string };
-const fileMeta = (file: File): FileMeta => ({ name: file.name, size: file.size, type: file.type });
-
 export const companyApi = {
+  /** Поиск по ИНН в базе сервиса (реестр компаний смоделирован на бэкенде). */
   async lookup(inn: string, token?: string | null): Promise<RegistryCompany> {
-    if (API_MODE === "mock") return mockCompany.lookup(inn);
     try {
-      return fromApiCompany(await request<ApiCompany>(`/company/by-inn/${encodeURIComponent(inn)}`, { token: token ?? undefined }));
+      return fromApiCompany(await request<ApiCompany>(`/company/by-inn/${encodeURIComponent(inn)}`, auth(token ?? null)));
     } catch (reason) {
-      // В режиме API отсутствие компании нельзя подменять demo-записью.
-      if (reason instanceof ApiError && reason.status === 404) throw new ApiError(404, "Компания не найдена в базе сервиса");
+      if (isNotFound(reason)) throw new ApiError(404, "Компания не найдена в базе сервиса");
       throw reason;
     }
   },
+
+  /** Компания текущего пользователя или null, если он ещё не привязан. */
   async get(token: string | null): Promise<Company | null> {
     const userId = currentUserId(token);
-    if (API_MODE === "mock") return mockCompany.get(userId);
+    let row: ApiCompany;
     try {
-      const company = fromApiCompany(await request<ApiCompany>("/company/me", { token: token ?? undefined }));
-      const local = await mockCompany.get(userId);
-      const merged = local ? { ...company, representativeName: local.representativeName, representativePosition: local.representativePosition, representativePositionOther: local.representativePositionOther } : company;
-      if (!merged.representativeName) {
-        merged.representativeName = (await request<ApiUser>("/auth/me", { token: token ?? undefined })).fullName;
-      }
-      // Мок хранит только расширенные UI-поля и последующие demo-этапы заявки.
-      // Синхронизация нужна, чтобы заявка backend открылась и в новом браузере.
-      return mockCompany.save(userId, merged);
+      row = await request<ApiCompany>("/company/me", auth(token));
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 404) return null;
+      if (isNotFound(reason)) return null;
       throw reason;
     }
+    const company = fromApiCompany(row);
+    const representative = localUi.getRepresentative(userId);
+    return {
+      ...company,
+      representativeName: representative?.name || (await request<ApiUser>("/auth/me", auth(token))).fullName,
+      representativePosition: representative?.position ?? "director",
+      representativePositionOther: representative?.positionOther ?? "",
+    };
   },
+
+  /**
+   * POST /company создаёт компанию или, если ИНН уже есть в базе, привязывает к существующей.
+   * Должность представителя API не хранит — запоминаем её в браузере.
+   */
   async save(token: string | null, company: Company): Promise<Company> {
     const userId = currentUserId(token);
-    if (API_MODE === "mock") return mockCompany.save(userId, company);
-    let saved = company;
-    // Пользователь уже привязан к компании? Тогда повторно привязывать не нужно.
     let linked: ApiCompany | null = null;
     try {
-      linked = await request<ApiCompany>("/company/me", { token: token ?? undefined });
+      linked = await request<ApiCompany>("/company/me", auth(token));
     } catch (reason) {
-      if (!(reason instanceof ApiError && reason.status === 404)) throw reason;
+      if (!isNotFound(reason)) throw reason;
     }
     if (linked && linked.inn !== company.inn) throw new ApiError(409, "Вы уже привязаны к другой компании");
-    if (linked) {
-      saved = { ...fromApiCompany(linked), representativeName: company.representativeName, representativePosition: company.representativePosition, representativePositionOther: company.representativePositionOther };
-    } else {
-      // POST /company: бэкенд создаёт компанию или, если ИНН уже есть в базе, привязывает к существующей.
-      const row = await request<ApiCompany>("/company", {
+    const row =
+      linked ??
+      (await request<ApiCompany>("/company", {
         method: "POST",
-        token: token ?? undefined,
+        ...auth(token),
         body: JSON.stringify({
           inn: company.inn,
           name: company.name,
@@ -205,295 +202,231 @@ export const companyApi = {
           registration_date: company.registrationDate,
           main_okved: company.okvedCode,
         }),
-      });
-      saved = { ...fromApiCompany(row), representativeName: company.representativeName, representativePosition: company.representativePosition, representativePositionOther: company.representativePositionOther };
-    }
-    // Backend пока не хранит должность и не отдаёт её через API.
-    return mockCompany.save(userId, saved);
+      }));
+    localUi.setRepresentative(userId, {
+      name: company.representativeName,
+      position: company.representativePosition,
+      positionOther: company.representativePositionOther,
+    });
+    return {
+      ...fromApiCompany(row),
+      representativeName: company.representativeName,
+      representativePosition: company.representativePosition,
+      representativePositionOther: company.representativePositionOther,
+    };
   },
-  listDocuments: (token: string | null): Promise<CompanyDocument[]> => mockCompany.listDocuments(currentUserId(token)),
-  uploadDocument: (token: string | null, file: File): Promise<CompanyDocument> =>
-    mockCompany.uploadDocument(currentUserId(token), fileMeta(file)),
-  deleteDocument: (token: string | null, id: string): Promise<void> => mockCompany.deleteDocument(currentUserId(token), id),
 };
 
 /* ---------- Заявки клиента ---------- */
 
-/**
- * Заявка в формате Go-бэкенда (docs/frontend/applications_API.md).
- * Бэкенд пока хранит только «ядро» заявки: продукт, сумму, срок, цель, статус и даты.
- * Финансы, документ, скоринг, предложения и история живут в моке под тем же id —
- * поэтому в режиме api заявка собирается из двух частей (mergeApplication).
- */
-type ApiApplication = BackendApplication;
+interface ApiDocument {
+  id: string;
+  document_type: string;
+  original_filename: string;
+  processing_status: string;
+  uploaded_at: string;
+}
 
-/** Последняя известная data_version каждой заявки — без неё бэкенд не примет PATCH. */
-const versions = new Map<string, number>();
+const appPath = (id: string) => `/applications/${encodeURIComponent(id)}`;
 
-const remember = (row: ApiApplication) => {
-  versions.set(row.id, row.data_version);
-  return row;
-};
+/** Финансовый PDF заявки (последний загруженный). */
+function toDocument(rows: ApiDocument[]): FinancialDocument | null {
+  const doc = rows.find((row) => row.document_type === "FINANCIAL_STATEMENT");
+  if (!doc) return null;
+  const status: FinancialDocument["status"] = /FAIL|ERROR|REJECT/i.test(doc.processing_status) ? "ERROR" : /PROCESS(ED)?$|UPLOADED/i.test(doc.processing_status) ? "EXTRACTED" : "PROCESSING";
+  return { id: doc.id, name: doc.original_filename, sizeBytes: 0, uploadedAt: doc.uploaded_at, status };
+}
 
-/**
- * Склейка: данные из бэкенда главнее для полей, которые он хранит
- * (сумма, срок, статус, даты). В моке остаются только поля интерфейса,
- * которых у бэкенда нет: должность представителя, исправленные ячейки и т. п.
- * Статус всегда берётся с бэкенда: проверка, скоринг и решение идут там.
- */
-function mergeApplication(row: ApiApplication, local: Application): Application {
+/** Заявка в строке списка: без финансов и документов (они нужны только на экране заявки). */
+function fromRow(row: BackendApplication, company: Company | null): Application {
   return {
-    ...local,
-    id: row.id,
-    number: numberFromId(row.id),
+    ...blankApplication(row.id),
     productCode: row.product_code,
-    amount: row.requested_amount_kopecks === null ? local.amount : row.requested_amount_kopecks / 100,
-    term: row.requested_term_months ?? local.term,
     status: mapStatus(row.status, row.updated_at),
+    company: row.company_id && company?.id === row.company_id ? company : null,
+    amount: row.requested_amount_kopecks === null ? null : row.requested_amount_kopecks / 100,
+    term: row.requested_term_months,
+    ...parsePurpose(row.purpose),
+    dataConfirmed: false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    submittedAt: row.submitted_at ?? local.submittedAt,
+    submittedAt: row.submitted_at,
   };
 }
 
-/** Заявка после отправки: предложения, запросы данных и ход заявки — с бэкенда. */
-async function withLifecycle(token: string, row: ApiApplication, app: Application): Promise<Application> {
-  if (row.status === "DRAFT") return app;
-  const base = `/applications/${encodeURIComponent(row.id)}`;
-  const [offers, requests] = await Promise.all([
-    request<BackendOffer[]>(`${base}/offers`, { token }),
-    request<BackendInfoRequest[]>(`${base}/info-requests`, { token }),
+/** Полная заявка: ядро, компания, финансы, PDF и — после отправки — предложения, запросы, ход заявки. */
+async function loadApplication(token: string | null, id: string): Promise<Application> {
+  const [row, company] = await Promise.all([request<BackendApplication>(appPath(id), auth(token)), companyApi.get(token)]);
+  const [financials, documents] = await Promise.all([
+    request<ApiFinancials>(`${appPath(id)}/financials`, auth(token)).catch((reason) => (isNotFound(reason) ? null : Promise.reject(reason))),
+    request<ApiDocument[]>(`${appPath(id)}/documents`, auth(token)).catch((reason) => (isNotFound(reason) ? [] : Promise.reject(reason))),
   ]);
-  const status = app.status;
+  const finance = financials ? fromApiFinancials(financials) : null;
+  const app: Application = {
+    ...fromRow(row, company),
+    debtPayment: finance?.debtPayment ?? null,
+    financials: finance && finance.financials.length ? finance.financials : null,
+    dataConfirmed: finance?.confirmed ?? false,
+    editedCells: localUi.getEditedCells(id),
+    document: toDocument(documents),
+  };
+  if (row.status === "DRAFT") return app;
+
+  const [offers, requests] = await Promise.all([
+    request<BackendOffer[]>(`${appPath(id)}/offers`, auth(token)),
+    request<BackendInfoRequest[]>(`${appPath(id)}/info-requests`, auth(token)),
+  ]);
   return {
     ...app,
     offers: toOffers(offers),
-    // Открытый запрос показываем только пока банк ждёт ответа
-    infoRequest: status === "NEED_DATA" ? toInfoRequest(requests.filter((item) => item.status === "OPEN")) : toInfoRequest(requests),
+    // Пока банк ждёт ответа — показываем открытый запрос
+    infoRequest: app.status === "NEED_DATA" ? toInfoRequest(requests.filter((item) => item.status === "OPEN")) : toInfoRequest(requests),
     decision: clientDecision(offers),
     history: clientHistory(row, offers, requests),
-    finalReason: null,
   };
 }
 
-/** Мок-часть заявки; если её нет (заявку создали в другом браузере) — создаём пустую. */
-async function localPart(userId: string, row: ApiApplication): Promise<Application> {
-  try {
-    return await mockApplications.get(userId, row.id);
-  } catch {
-    return mockApplications.create(userId, row.product_code, row.id);
-  }
-}
-
 /** Цель для бэкенда — одна строка: название из справочника или текст для «Другое». */
-function purposeText(app: Application): string {
-  if (!app.purposeCode) return "";
-  if (app.purposeCode === "other") return app.purposeComment.trim();
-  return PURPOSE_LABELS[app.purposeCode];
+function purposeText(code: Application["purposeCode"], comment: string): string {
+  if (!code) return "";
+  return code === "other" ? comment.trim() : PURPOSE_LABELS[code];
 }
 
-const CORE_FIELDS: (keyof ApplicationPatch)[] = ["amount", "term", "purposeCode", "purposeComment"];
-
-async function patchBackend(token: string, app: Application): Promise<ApiApplication> {
+/** Сохраняет сумму, срок и цель черновика (PATCH с текущей data_version). */
+async function patchCore(token: string | null, row: BackendApplication, patch: ApplicationPatch, companyId?: string) {
+  const current = parsePurpose(row.purpose);
+  const code = "purposeCode" in patch ? (patch.purposeCode ?? null) : current.purposeCode;
+  const comment = "purposeComment" in patch ? (patch.purposeComment ?? "") : current.purposeComment;
   // Бэкенд не принимает null («оставить как есть»), поэтому отправляем только заполненное
-  const body: Record<string, unknown> = { purpose: purposeText(app) };
-  if (app.amount) body.requested_amount_kopecks = Math.round(app.amount * 100);
-  if (app.term) body.requested_term_months = app.term;
-  if (app.company?.id) body.company_id = app.company.id;
-
-  const send = async () =>
-    remember(
-      await request<ApiApplication>(`/applications/${encodeURIComponent(app.id)}`, {
-        method: "PATCH",
-        token,
-        body: JSON.stringify({ ...body, data_version: versions.get(app.id) ?? 1 }),
-      }),
-    );
-
-  try {
-    return await send();
-  } catch (reason) {
-    // 409 из-за версии: перечитываем заявку и повторяем один раз.
-    // Перезапись безопасна: черновик редактирует только его владелец, и отправляем мы полное состояние мастера.
-    if (!(reason instanceof ApiError) || reason.status !== 409 || /not a draft/i.test(reason.message)) throw reason;
-    remember(await request<ApiApplication>(`/applications/${encodeURIComponent(app.id)}`, { token }));
-    return send();
-  }
+  const body: Record<string, unknown> = { data_version: row.data_version, purpose: purposeText(code, comment) };
+  if (patch.amount) body.requested_amount_kopecks = kopecks(patch.amount);
+  if (patch.term) body.requested_term_months = patch.term;
+  if (companyId && !row.company_id) body.company_id = companyId;
+  return request<BackendApplication>(appPath(row.id), { method: "PATCH", ...auth(token), body: JSON.stringify(body) });
 }
 
-const apiApplications = {
+/** Сохраняет финансы и платёж по кредитам (новая версия, подтверждение снимается). */
+async function putFinancials(token: string | null, id: string, debtPayment: number, financials: FinanceMonth[]) {
+  const row = await request<BackendApplication>(appPath(id), auth(token));
+  return request<ApiFinancials>(`${appPath(id)}/financials`, {
+    method: "PUT",
+    ...auth(token),
+    body: JSON.stringify(toApiFinancials(row.data_version, debtPayment, financials)),
+  });
+}
+
+export const applicationsApi = {
   async list(token: string | null): Promise<Application[]> {
-    const userId = currentUserId(token);
-    const company = await companyApi.get(token);
-    const rows = await request<ApiApplication[]>("/applications", { token: token ?? undefined });
-    return Promise.all(rows.map(async (row) => {
-      const local = await localPart(userId, row);
-      if (row.company_id && company?.id === row.company_id) local.company = company;
-      return mergeApplication(remember(row), local);
-    }));
+    const [rows, company] = await Promise.all([request<BackendApplication[]>("/applications", auth(token)), companyApi.get(token)]);
+    return rows.map((row) => fromRow(row, company));
   },
 
-  async get(token: string | null, id: string): Promise<Application> {
-    const userId = currentUserId(token);
-    const company = await companyApi.get(token);
-    const row = remember(await request<ApiApplication>(`/applications/${encodeURIComponent(id)}`, { token: token ?? undefined }));
-    const local = await localPart(userId, row);
-    if (row.company_id && company?.id === row.company_id) local.company = company;
-    let merged = mergeApplication(row, local);
-    try {
-      const financial = fromApiFinancials(await request<ApiFinancials>(`/applications/${encodeURIComponent(id)}/financials`, { token: token ?? undefined }));
-      versions.set(id, financial.version);
-      merged = { ...merged, debtPayment: financial.debtPayment, financials: financial.financials, dataConfirmed: financial.confirmed };
-    } catch (reason) {
-      if (!(reason instanceof ApiError) || reason.status !== 404) throw reason;
-    }
-    return withLifecycle(token as string, row, merged);
-  },
+  get: loadApplication,
 
   async create(token: string | null, productCode: string): Promise<Application> {
-    const userId = currentUserId(token);
-    const row = remember(
-      await request<ApiApplication>("/applications", {
-        method: "POST",
-        token: token ?? undefined,
-        body: JSON.stringify({ product_code: productCode }),
-      }),
-    );
-    const local = await mockApplications.create(userId, productCode, row.id);
-    const linked = local.company?.id ? await patchBackend(token as string, local) : row;
-    return mergeApplication(linked, local);
-  },
-
-  async update(token: string | null, id: string, patch: ApplicationPatch): Promise<Application> {
-    const userId = currentUserId(token);
-    const local = await mockApplications.update(userId, id, patch);
-    if (!CORE_FIELDS.some((field) => field in patch)) return local;
-    const row = await patchBackend(token as string, local);
-    return mergeApplication(row, local);
-  },
-
-  async submit(token: string | null, id: string): Promise<Application> {
-    const userId = currentUserId(token);
-    // Скоринг и решение (авто-отказ / ручная проверка / авто-предложение) выполняет бэкенд
-    const row = remember(await request<ApiApplication>(`/applications/${encodeURIComponent(id)}/submit`, { method: "POST", token: token ?? undefined }));
-    const local = await localPart(userId, row);
-    return withLifecycle(token as string, row, mergeApplication(row, local));
-  },
-
-  /** Ответ на предложение: ACCEPT или DECLINE для действующего предложения. */
-  async respondToOffer(token: string | null, id: string, action: "ACCEPT" | "DECLINE"): Promise<Application> {
-    const base = `/applications/${encodeURIComponent(id)}`;
-    const [row, offers] = await Promise.all([
-      request<ApiApplication>(base, { token: token ?? undefined }),
-      request<BackendOffer[]>(`${base}/offers`, { token: token ?? undefined }),
+    const [row, company] = await Promise.all([
+      request<BackendApplication>("/applications", { method: "POST", ...auth(token), body: JSON.stringify({ product_code: productCode }) }),
+      companyApi.get(token),
     ]);
-    const pending = offers.find((offer) => offer.status === "PENDING");
-    if (!pending) throw new ApiError(409, "Предложение больше не действует");
-    await request(`${base}/offers/${encodeURIComponent(pending.id)}/respond`, {
-      method: "POST",
-      token: token ?? undefined,
-      body: JSON.stringify({ data_version: row.data_version, action }),
-    });
-    return this.get(token, id);
+    // Сразу привязываем заявку к компании пользователя
+    if (company?.id) await patchCore(token, row, {}, company.id);
+    return loadApplication(token, row.id);
+  },
+
+  /**
+   * Автосохранение мастера. Сумма/срок/цель → PATCH заявки;
+   * финансы и платёж по кредитам → PUT financials (если таблица уже есть);
+   * отметки «исправлено вручную» → в браузер.
+   */
+  async update(token: string | null, id: string, patch: ApplicationPatch): Promise<void> {
+    if (patch.editedCells) localUi.setEditedCells(id, patch.editedCells);
+    if (["amount", "term", "purposeCode", "purposeComment"].some((key) => key in patch)) {
+      const [row, company] = await Promise.all([request<BackendApplication>(appPath(id), auth(token)), companyApi.get(token)]);
+      await patchCore(token, row, patch, company?.id);
+    }
+    if ("financials" in patch || "debtPayment" in patch) {
+      const current = await request<ApiFinancials>(`${appPath(id)}/financials`, auth(token)).catch((reason) => (isNotFound(reason) ? null : Promise.reject(reason)));
+      if (!current) return; // таблицы ещё нет — платёж сохранится вместе с финансами после загрузки PDF
+      const mapped = fromApiFinancials(current);
+      const financials = patch.financials ?? mapped.financials;
+      const debt = patch.debtPayment !== undefined ? patch.debtPayment : mapped.debtPayment;
+      await putFinancials(token, id, debt ?? 0, financials);
+    }
+  },
+
+  /** Загрузка финансового PDF: показатели извлекает DS на бэкенде. Повторная загрузка заменяет данные. */
+  async uploadFinancialDocument(token: string | null, id: string, file: File): Promise<Application> {
+    const body = new FormData();
+    body.append("file", file);
+    body.append("document_type", "FINANCIAL_STATEMENT");
+    await request(`${appPath(id)}/documents`, { method: "POST", ...auth(token), body });
+    localUi.setEditedCells(id, []);
+    return loadApplication(token, id);
+  },
+
+  async saveFinancials(token: string | null, id: string, debtPayment: number, financials: FinanceMonth[]): Promise<Application> {
+    await putFinancials(token, id, debtPayment, financials);
+    return loadApplication(token, id);
+  },
+
+  /** Подтверждение финансов: тело { data_version } текущей версии (берём свежим GET). */
+  async confirmFinancials(token: string | null, id: string): Promise<Application> {
+    const current = await request<ApiFinancials>(`${appPath(id)}/financials`, auth(token));
+    await request(`${appPath(id)}/financials/confirm`, { method: "POST", ...auth(token), body: JSON.stringify({ data_version: current.data_version }) });
+    return loadApplication(token, id);
+  },
+
+  /** Отправка: скоринг и решение (автоотказ / ручная проверка / автопредложение) выполняет бэкенд. */
+  async submit(token: string | null, id: string): Promise<Application> {
+    await request(`${appPath(id)}/submit`, { method: "POST", ...auth(token) });
+    return loadApplication(token, id);
   },
 
   /** Ответ на запрос банка: необязательный PDF (SUPPORTING_DOCUMENT) + пояснение. */
-  async respondToInfoRequest(token: string | null, id: string, response: { file?: File | null; explanation: string }): Promise<Application> {
-    const base = `/applications/${encodeURIComponent(id)}`;
+  async respondToInfoRequest(token: string | null, id: string, response: { file: File | null; explanation: string }): Promise<Application> {
     if (response.file) {
       const body = new FormData();
       body.append("file", response.file);
       body.append("document_type", "SUPPORTING_DOCUMENT");
-      await request(`${base}/documents`, { method: "POST", token: token ?? undefined, body });
+      await request(`${appPath(id)}/documents`, { method: "POST", ...auth(token), body });
     }
     const [row, requests] = await Promise.all([
-      request<ApiApplication>(base, { token: token ?? undefined }),
-      request<BackendInfoRequest[]>(`${base}/info-requests`, { token: token ?? undefined }),
+      request<BackendApplication>(appPath(id), auth(token)),
+      request<BackendInfoRequest[]>(`${appPath(id)}/info-requests`, auth(token)),
     ]);
     const open = requests.find((item) => item.status === "OPEN");
     if (!open) throw new ApiError(409, "Открытого запроса банка нет");
-    await request(`${base}/info-requests/${encodeURIComponent(open.id)}/respond`, {
+    await request(`${appPath(id)}/info-requests/${encodeURIComponent(open.id)}/respond`, {
       method: "POST",
-      token: token ?? undefined,
+      ...auth(token),
       body: JSON.stringify({ data_version: row.data_version, response_comment: response.explanation }),
     });
-    return this.get(token, id);
+    return loadApplication(token, id);
   },
 
-  async uploadFinancialDocument(token: string | null, id: string, file: File): Promise<Application> {
-    const body = new FormData();
-    body.append("file", file);
-    await request(`/applications/${encodeURIComponent(id)}/documents`, { method: "POST", token: token ?? undefined, body });
-    // Показатели из PDF извлекает DS на бэкенде — берём их оттуда, а не демо-значения мока,
-    // иначе при сохранении (PUT financials) настоящие цифры перезаписались бы демо-данными.
-    const local = await mockApplications.uploadFinancialDocument(currentUserId(token), id, fileMeta(file));
-    const extracted = fromApiFinancials(await request<ApiFinancials>(`/applications/${encodeURIComponent(id)}/financials`, { token: token ?? undefined }));
-    versions.set(id, extracted.version);
-    const patch = { financials: extracted.financials, debtPayment: extracted.debtPayment ?? local.debtPayment, editedCells: [], dataConfirmed: false };
-    try {
-      return { ...(await mockApplications.update(currentUserId(token), id, patch)), document: local.document ? { ...local.document, status: "EXTRACTED" } : local.document };
-    } catch {
-      return { ...local, ...patch };
-    }
-  },
+  acceptOffer: (token: string | null, id: string) => respondToOffer(token, id, "ACCEPT"),
 
-  async saveFinancials(token: string | null, id: string, debtPayment: number, financials: FinanceMonth[]): Promise<Application> {
-    const row = await request<ApiFinancials>(`/applications/${encodeURIComponent(id)}/financials`, {
-      method: "PUT",
-      token: token ?? undefined,
-      body: JSON.stringify(toApiFinancials(versions.get(id) ?? 1, debtPayment, financials)),
-    });
-    const mapped = fromApiFinancials(row);
-    versions.set(id, mapped.version);
-    const local = await mockApplications.update(currentUserId(token), id, { debtPayment: mapped.debtPayment, financials: mapped.financials, dataConfirmed: false });
-    return { ...local, debtPayment: mapped.debtPayment, financials: mapped.financials, dataConfirmed: false };
-  },
-
-  async confirmFinancials(token: string | null, id: string): Promise<Application> {
-    // Бэкенд подтверждает финансы только для текущей версии заявки: тело { data_version }.
-    // Берём версию свежим GET, а не из кэша: после PUT/загрузки PDF она могла вырасти.
-    const current = await request<ApiFinancials>(`/applications/${encodeURIComponent(id)}/financials`, { token: token ?? undefined });
-    const row = fromApiFinancials(
-      await request<ApiFinancials>(`/applications/${encodeURIComponent(id)}/financials/confirm`, {
-        method: "POST",
-        token: token ?? undefined,
-        body: JSON.stringify({ data_version: current.data_version }),
-      }),
-    );
-    versions.set(id, row.version);
-    return mockApplications.update(currentUserId(token), id, { debtPayment: row.debtPayment, financials: row.financials, dataConfirmed: row.confirmed });
-  },
+  /**
+   * Отказ от предложения. Причину бэкенд пока не принимает, а повторного
+   * рассмотрения (экран 18) на бэкенде нет — отказ окончательный.
+   */
+  declineOffer: (token: string | null, id: string, _reason: DeclineReason, _comment: string) => respondToOffer(token, id, "DECLINE"),
 };
 
-export const applicationsApi = {
-  list: (token: string | null): Promise<Application[]> =>
-    API_MODE === "api" ? apiApplications.list(token) : mockApplications.list(currentUserId(token)),
-  get: (token: string | null, id: string): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.get(token, id) : mockApplications.get(currentUserId(token), id),
-  create: (token: string | null, productCode: string): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.create(token, productCode) : mockApplications.create(currentUserId(token), productCode),
-  update: (token: string | null, id: string, patch: ApplicationPatch): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.update(token, id, patch) : mockApplications.update(currentUserId(token), id, patch),
-  uploadFinancialDocument: (token: string | null, id: string, file: File): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.uploadFinancialDocument(token, id, file) : mockApplications.uploadFinancialDocument(currentUserId(token), id, fileMeta(file)),
-  removeFinancialDocument: (token: string | null, id: string): Promise<Application> =>
-    mockApplications.removeFinancialDocument(currentUserId(token), id),
-  submit: (token: string | null, id: string): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.submit(token, id) : mockApplications.submit(currentUserId(token), id),
-  saveFinancials: (token: string | null, id: string, debtPayment: number, financials: FinanceMonth[]): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.saveFinancials(token, id, debtPayment, financials) : mockApplications.update(currentUserId(token), id, { debtPayment, financials }),
-  confirmFinancials: (token: string | null, id: string): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.confirmFinancials(token, id) : mockApplications.update(currentUserId(token), id, { dataConfirmed: true }),
-  respondToInfoRequest: (token: string | null, id: string, response: { file: File | null; explanation: string }): Promise<Application> =>
-    API_MODE === "api"
-      ? apiApplications.respondToInfoRequest(token, id, response)
-      : mockApplications.respondToInfoRequest(currentUserId(token), id, { fileName: response.file?.name ?? null, explanation: response.explanation }),
-  acceptOffer: (token: string | null, id: string): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.respondToOffer(token, id, "ACCEPT") : mockApplications.acceptOffer(currentUserId(token), id),
-  /** На бэкенде отказ от предложения окончательный: повторного рассмотрения (экран 18) там нет. */
-  declineOffer: (token: string | null, id: string, reason: DeclineReason, comment: string): Promise<Application> =>
-    API_MODE === "api" ? apiApplications.respondToOffer(token, id, "DECLINE") : mockApplications.declineOffer(currentUserId(token), id, reason, comment),
-};
+async function respondToOffer(token: string | null, id: string, action: "ACCEPT" | "DECLINE"): Promise<Application> {
+  const [row, offers] = await Promise.all([
+    request<BackendApplication>(appPath(id), auth(token)),
+    request<BackendOffer[]>(`${appPath(id)}/offers`, auth(token)),
+  ]);
+  const pending = offers.find((offer) => offer.status === "PENDING");
+  if (!pending) throw new ApiError(409, "Предложение больше не действует");
+  await request(`${appPath(id)}/offers/${encodeURIComponent(pending.id)}/respond`, {
+    method: "POST",
+    ...auth(token),
+    body: JSON.stringify({ data_version: row.data_version, action }),
+  });
+  return loadApplication(token, id);
+}
 
 /* ---------- Кабинет банка ---------- */
 
@@ -504,31 +437,29 @@ type OfferConditions = { amount: number; term: number; rate: number };
 const bankDetails = new Map<string, BankDetail>();
 
 /** Сотрудник из токена: id нужен, чтобы отличать свои решения от чужих. */
-function bankMe(token: string | null, name: string) {
-  return { id: currentUserId(token), name };
-}
+const bankMe = (token: string | null, name: string) => ({ id: currentUserId(token), name });
 
-/** Строки запроса данных: 1..20 разных непустых пунктов (так требует бэкенд). */
+/** Пункты запроса данных: 1..20 разных непустых строк (так требует бэкенд). */
 function requiredItems(comment: string) {
   const items = [...new Set(comment.split(/\n|;/).map((line) => line.trim().slice(0, 500)).filter(Boolean))].slice(0, 20);
   return items.length ? items : [comment.trim().slice(0, 500)];
 }
 
-const apiBank = {
+export const bankApi = {
   async list(token: string | null, params: { view: QueueView; inn: string; employeeName: string }): Promise<Application[]> {
     const query = new URLSearchParams({ limit: "100" });
     if (params.inn) query.set("q", params.inn);
     if (params.view === "mine") {
-      const page = await request<BackendPage<BankDecisionRow>>(`/bank/decisions?${query}`, { token: token ?? undefined });
+      const page = await request<BackendPage<BankDecisionRow>>(`/bank/decisions?${query}`, auth(token));
       return page.items.map((row) => fromDecisionRow(row, bankMe(token, params.employeeName)));
     }
     const path = params.view === "archive" ? "/bank/archive" : "/bank/applications/page";
-    const page = await request<BackendPage<BankQueueRow>>(`${path}?${query}`, { token: token ?? undefined });
+    const page = await request<BackendPage<BankQueueRow>>(`${path}?${query}`, auth(token));
     return page.items.map(fromQueueRow);
   },
 
   async get(token: string | null, id: string, employeeName = ""): Promise<Application> {
-    const detail = await request<BankDetail>(`/bank/applications/${encodeURIComponent(id)}`, { token: token ?? undefined });
+    const detail = await request<BankDetail>(`/bank/applications/${encodeURIComponent(id)}`, auth(token));
     bankDetails.set(id, detail);
     return fromBankDetail(detail, bankMe(token, employeeName));
   },
@@ -539,24 +470,23 @@ const apiBank = {
    * с изменёнными суммой/сроком/ставкой → COUNTER_OFFER. Запрос данных — отдельный маршрут.
    */
   async decide(token: string | null, id: string, decision: BankDecisionInput, conditions?: OfferConditions): Promise<Application> {
-    const auth = { token: token ?? undefined };
-    const detail = bankDetails.get(id) ?? (await request<BankDetail>(`/bank/applications/${encodeURIComponent(id)}`, auth));
     const base = `/bank/applications/${encodeURIComponent(id)}`;
+    const detail = bankDetails.get(id) ?? (await request<BankDetail>(base, auth(token)));
     const dataVersion = detail.application.data_version;
     const comment = decision.comment.trim();
 
-    await request(`${base}/claim`, { method: "POST", ...auth, body: JSON.stringify({ data_version: dataVersion }) });
+    await request(`${base}/claim`, { method: "POST", ...auth(token), body: JSON.stringify({ data_version: dataVersion }) });
 
     if (decision.type === "REQUEST_DATA") {
       await request(`${base}/info-requests`, {
         method: "POST",
-        ...auth,
+        ...auth(token),
         body: JSON.stringify({ data_version: dataVersion, description: comment, required_items: requiredItems(comment) }),
       });
     } else if (decision.type === "REJECT") {
       await request(`${base}/decisions`, {
         method: "POST",
-        ...auth,
+        ...auth(token),
         body: JSON.stringify({ data_version: dataVersion, action: "REJECT", reason_code: "MANUAL_REJECTION", comment }),
       });
     } else {
@@ -577,17 +507,8 @@ const apiBank = {
             valid_until: validUntil,
             offer: { amount_kopecks: kopecks(conditions.amount), term_months: conditions.term, annual_rate_bps: bps(conditions.rate) },
           };
-      await request(`${base}/decisions`, { method: "POST", ...auth, body: JSON.stringify(body) });
+      await request(`${base}/decisions`, { method: "POST", ...auth(token), body: JSON.stringify(body) });
     }
-    return this.get(token, id, decision.employeeName);
+    return bankApi.get(token, id, decision.employeeName);
   },
-};
-
-export const bankApi = {
-  list: (token: string | null, params: { view: QueueView; inn: string; employeeName: string }): Promise<Application[]> =>
-    API_MODE === "api" ? apiBank.list(token, params) : mockBank.list(params),
-  get: (token: string | null, id: string, employeeName?: string): Promise<Application> =>
-    API_MODE === "api" ? apiBank.get(token, id, employeeName) : mockBank.get(id),
-  decide: (token: string | null, id: string, decision: BankDecisionInput, conditions?: OfferConditions): Promise<Application> =>
-    API_MODE === "api" ? apiBank.decide(token, id, decision, conditions) : mockBank.decide(id, decision, conditions),
 };
