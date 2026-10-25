@@ -10,7 +10,41 @@ from schemas import (
 )
 
 
-MODEL_VERSION = "financial_rules_v1"
+MODEL_VERSION = "financial_rules_v2"
+
+# Плавная шкала: баллы линейно интерполируются между опорными точками,
+# а не прыгают ступенькой на границе диапазона. Опорные точки совпадают
+# с прежними порогами, поэтому смысл диапазонов (и тексты объяснений) сохранён.
+COVERAGE_ANCHORS = (
+    (Decimal("1.0"), 15),
+    (Decimal("1.2"), 30),
+    (Decimal("1.5"), 45),
+    (Decimal("2.0"), 60),
+)
+STABILITY_ANCHORS = (
+    (Decimal("0.10"), 20),
+    (Decimal("0.25"), 15),
+    (Decimal("0.50"), 5),
+    (Decimal("0.75"), 0),
+)
+GROWTH_ANCHORS = (
+    (Decimal("-0.20"), 0),
+    (Decimal("-0.05"), 5),
+    (Decimal("0"), 10),  # выручка без изменений — нейтральные 10 баллов, как раньше
+    (Decimal("0.20"), 20),
+)
+
+
+def interpolate_points(value: Decimal, anchors) -> int:
+    """Кусочно-линейная интерполяция; за краями — значение крайней точки."""
+    if value <= anchors[0][0]:
+        return anchors[0][1]
+    for (x0, y0), (x1, y1) in zip(anchors, anchors[1:]):
+        if value <= x1:
+            share = (value - x0) / (x1 - x0)
+            points = Decimal(y0) + (Decimal(y1) - Decimal(y0)) * share
+            return int(points.quantize(Decimal("1"), rounding="ROUND_HALF_UP"))
+    return anchors[-1][1]
 
 
 def calculate_score_from_metrics(
@@ -110,6 +144,15 @@ def calculate_score_from_metrics(
             "Средняя выручка последних трёх месяцев выросла "
             "минимум на 5% относительно первых трёх"
         )
+
+    # Тексты выше выбираются по диапазонам, а баллы — по плавной шкале.
+    # Покрытие < 1 остаётся жёстким: 0 баллов и потолок score 39.
+    if coverage >= Decimal("1"):
+        coverage_points = interpolate_points(coverage, COVERAGE_ANCHORS)
+    if cv is not None:
+        stability_points = interpolate_points(cv, STABILITY_ANCHORS)
+    if growth is not None:
+        growth_points = interpolate_points(growth, GROWTH_ANCHORS)
 
     components = ScoreComponents(
         coverage_points=coverage_points,

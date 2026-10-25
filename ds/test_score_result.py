@@ -33,11 +33,12 @@ class ScoreResultTests(unittest.TestCase):
             calculate_financial_metrics(make_input()),
             debt_service_coverage_ratio=Decimal("0.9"),
             revenue_cv=Decimal("0.08"),
-            revenue_growth_ratio=Decimal("0.10"),
+            revenue_growth_ratio=Decimal("0.20"),
         )
 
         result = calculate_score_from_metrics(metrics)
 
+        # 0 (C<1) + 20 (CV 0.08) + 20 (рост 20%) = 40 → потолок 39.
         self.assertEqual(result.raw_score, 40)
         self.assertEqual(result.score_cap, 39)
         self.assertEqual(result.score, 39)

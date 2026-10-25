@@ -136,6 +136,38 @@ func (s *Service) List(ctx context.Context, applicationID string, userID string)
 	return s.repo.List(ctx, applicationID, userID)
 }
 
+// deleter — необязательная возможность репозитория (есть у PostgresRepository).
+// Отдельный интерфейс, чтобы не ломать тестовые реализации Repository.
+type deleter interface {
+	Delete(ctx context.Context, appID, docID, userID string) (string, error)
+}
+
+// Delete удаляет PDF черновика: запись, извлечённые из него финансы и сам файл.
+func (s *Service) Delete(ctx context.Context, appID, docID, userID string) error {
+	if _, err := uuid.Parse(appID); err != nil {
+		return ErrInvalidInput
+	}
+	if _, err := uuid.Parse(docID); err != nil {
+		return ErrInvalidInput
+	}
+	if _, err := uuid.Parse(userID); err != nil {
+		return ErrInvalidInput
+	}
+	repo, ok := s.repo.(deleter)
+	if !ok {
+		return errors.New("document deletion is not supported by repository")
+	}
+	key, err := repo.Delete(ctx, appID, docID, userID)
+	if err != nil {
+		return err
+	}
+	// Файл удаляем после фиксации в БД; если не вышло — запись уже удалена, файл просто останется на диске
+	if err := s.storage.Delete(ctx, key); err != nil {
+		log.Printf("delete document file %s: %v", key, err)
+	}
+	return nil
+}
+
 func (s *Service) Download(ctx context.Context, appID, docID, user, role string) (*Document, []byte, error) {
 	for _, id := range []string{appID, docID, user} {
 		if _, err := uuid.Parse(id); err != nil {

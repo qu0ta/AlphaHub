@@ -23,6 +23,7 @@ type Repository interface {
 	CreateForUser(ctx context.Context, userID string, company Company) (*Company, error)
 	GetByUserID(ctx context.Context, userID string) (*Company, error)
 	GetByINN(ctx context.Context, inn string) (*Company, error)
+	UpdatePosition(ctx context.Context, userID string, position *string) error
 }
 
 type Service struct {
@@ -51,6 +52,18 @@ func validText(value string, maxLength int) bool {
 	return value != "" &&
 		utf8.ValidString(value) &&
 		utf8.RuneCountInString(value) <= maxLength
+}
+
+// normalizePosition: пустая строка → nil (должность не указана), иначе до 255 символов.
+func normalizePosition(value string) (*string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	if !validText(value, 255) {
+		return nil, ErrInvalidInput
+	}
+	return &value, nil
 }
 
 func (s *Service) Create(ctx context.Context, userID string, req CreateRequest) (*Company, error) {
@@ -84,7 +97,12 @@ func (s *Service) Create(ctx context.Context, userID string, req CreateRequest) 
 	if regDate.After(today) {
 		return nil, ErrInvalidInput
 	}
+	position, err := normalizePosition(req.RepresentativePosition)
+	if err != nil {
+		return nil, err
+	}
 	return s.repo.CreateForUser(ctx, userID, Company{
+		Position:         position,
 		ID:               uuid.NewString(),
 		INN:              inn,
 		Name:             name,
@@ -97,6 +115,21 @@ func (s *Service) Create(ctx context.Context, userID string, req CreateRequest) 
 func (s *Service) GetMe(ctx context.Context, userID string) (*Company, error) {
 	if _, err := uuid.Parse(userID); err != nil {
 		return nil, ErrInvalidInput
+	}
+	return s.repo.GetByUserID(ctx, userID)
+}
+
+// UpdatePosition меняет должность представителя и возвращает компанию пользователя.
+func (s *Service) UpdatePosition(ctx context.Context, userID string, req PositionRequest) (*Company, error) {
+	if _, err := uuid.Parse(userID); err != nil {
+		return nil, ErrInvalidInput
+	}
+	position, err := normalizePosition(req.RepresentativePosition)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdatePosition(ctx, userID, position); err != nil {
+		return nil, err
 	}
 	return s.repo.GetByUserID(ctx, userID)
 }

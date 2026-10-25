@@ -616,7 +616,8 @@ func (r *PostgresRepository) RespondOffer(ctx context.Context, id, offerID, user
 		nextStatus, offerStatus = "ACCEPTED", "ACCEPTED"
 		selected = &offerID
 	}
-	_, err = tx.Exec(ctx, `UPDATE offers SET status=$2,responded_at=$3,responded_by_user_id=$4 WHERE id=$1`, offerID, offerStatus, now, user)
+	_, err = tx.Exec(ctx, `UPDATE offers SET status=$2,responded_at=$3,responded_by_user_id=$4,decline_reason=NULLIF($5,''),decline_comment=NULLIF($6,'') WHERE id=$1`,
+		offerID, offerStatus, now, user, req.DeclineReason, req.DeclineComment)
 	if err != nil {
 		return nil, err
 	}
@@ -637,6 +638,12 @@ func (r *PostgresRepository) RespondOffer(ctx context.Context, id, offerID, user
 	offer.Status = offerStatus
 	offer.RespondedAt = &now
 	offer.RespondedByUserID = &user
+	if req.DeclineReason != "" {
+		offer.DeclineReason = &req.DeclineReason
+	}
+	if req.DeclineComment != "" {
+		offer.DeclineComment = &req.DeclineComment
+	}
 	return &OfferResponse{id, app.DataVersion, nextStatus, offer}, nil
 }
 

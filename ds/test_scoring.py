@@ -16,6 +16,10 @@ class ScoringTests(unittest.TestCase):
             make_input(),
         )
 
+    def components(self, **changes):
+        metrics = replace(self.base, **changes)
+        return calculate_score(metrics).components
+
     def test_basic_score(self):
         response = score_application(
             make_input(),
@@ -26,78 +30,101 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(response.explanation.negative_factors, [])
         self.assertEqual(
             response.model_version,
-            "financial_rules_v1",
+            "financial_rules_v2",
         )
 
-    def test_coverage_boundaries(self):
-        # Стабильность и динамика вместе дают 30 баллов.
+    def test_coverage_scale(self):
+        # Плавная шкала: 15 баллов при C=1, 60 при C>=2, между опорными точками — линейно.
         cases = [
-            ("0.9999", 30),
-            ("1", 45),
-            ("1.1999", 45),
-            ("1.2", 60),
-            ("1.4999", 60),
-            ("1.5", 75),
-            ("1.9999", 75),
-            ("2", 90),
+            ("0.9999", 0),
+            ("1", 15),
+            ("1.1", 23),
+            ("1.2", 30),
+            ("1.35", 38),
+            ("1.5", 45),
+            ("1.75", 53),
+            ("2", 60),
+            ("3", 60),
         ]
 
-        for coverage, expected_score in cases:
+        for coverage, expected in cases:
             with self.subTest(coverage=coverage):
-                metrics = replace(
-                    self.base,
+                points = self.components(
                     debt_service_coverage_ratio=Decimal(coverage),
-                )
-                self.assertEqual(
-                    calculate_score(metrics).score,
-                    expected_score,
-                )
+                ).coverage_points
+                self.assertEqual(points, expected)
 
-    def test_stability_boundaries(self):
-        # Покрытие и динамика вместе дают 70 баллов.
+    def test_stability_scale(self):
         cases = [
-            ("0", 90),
-            ("0.10", 90),
-            ("0.1001", 85),
-            ("0.25", 85),
-            ("0.2501", 75),
-            ("0.50", 75),
-            ("0.5001", 70),
+            ("0", 20),
+            ("0.10", 20),
+            ("0.175", 18),
+            ("0.25", 15),
+            ("0.375", 10),
+            ("0.50", 5),
+            ("0.625", 3),
+            ("0.75", 0),
+            ("1", 0),
         ]
 
-        for cv, expected_score in cases:
+        for cv, expected in cases:
             with self.subTest(cv=cv):
-                metrics = replace(
-                    self.base,
+                points = self.components(
                     revenue_cv=Decimal(cv),
-                )
-                self.assertEqual(
-                    calculate_score(metrics).score,
-                    expected_score,
-                )
+                ).stability_points
+                self.assertEqual(points, expected)
 
-    def test_growth_boundaries(self):
-        # Покрытие и стабильность вместе дают 80 баллов.
+    def test_growth_scale(self):
         cases = [
-            ("-0.2001", 80),
-            ("-0.20", 85),
-            ("-0.0501", 85),
-            ("-0.05", 90),
-            ("0", 90),
-            ("0.0499", 90),
-            ("0.05", 100),
+            ("-0.5", 0),
+            ("-0.20", 0),
+            ("-0.125", 3),
+            ("-0.05", 5),
+            ("-0.025", 8),
+            ("0", 10),
+            ("0.05", 13),
+            ("0.10", 15),
+            ("0.20", 20),
+            ("0.5", 20),
         ]
 
-        for growth, expected_score in cases:
+        for growth, expected in cases:
             with self.subTest(growth=growth):
-                metrics = replace(
-                    self.base,
+                points = self.components(
                     revenue_growth_ratio=Decimal(growth),
-                )
-                self.assertEqual(
-                    calculate_score(metrics).score,
-                    expected_score,
-                )
+                ).growth_points
+                self.assertEqual(points, expected)
+
+    def test_no_jumps_at_old_boundaries(self):
+        # Раньше на границах диапазонов балл прыгал на 5–15 пунктов,
+        # теперь соседние значения отличаются не больше чем на 1 балл.
+        boundaries = {
+            "debt_service_coverage_ratio": ["1.2", "1.5", "2"],
+            "revenue_cv": ["0.10", "0.25", "0.50"],
+            "revenue_growth_ratio": ["-0.20", "-0.05", "0.05"],
+        }
+        step = Decimal("0.0001")
+
+        for field, values in boundaries.items():
+            for value in values:
+                with self.subTest(field=field, value=value):
+                    left = calculate_score(
+                        replace(self.base, **{field: Decimal(value) - step})
+                    ).raw_score
+                    right = calculate_score(
+                        replace(self.base, **{field: Decimal(value) + step})
+                    ).raw_score
+                    self.assertLessEqual(abs(left - right), 1)
+
+    def test_scale_is_monotonic(self):
+        previous = None
+        for i in range(100, 301):
+            points = self.components(
+                debt_service_coverage_ratio=Decimal(i) / 100,
+            ).coverage_points
+            if previous is not None:
+                self.assertGreaterEqual(points, previous)
+            previous = points
 
     def test_insufficient_coverage_caps_score(self):
         # Без ограничения получилось бы 0 + 20 + 20 = 40.
@@ -105,11 +132,12 @@ class ScoringTests(unittest.TestCase):
             self.base,
             debt_service_coverage_ratio=Decimal("0.9"),
             revenue_cv=Decimal("0"),
-            revenue_growth_ratio=Decimal("0.10"),
+            revenue_growth_ratio=Decimal("0.20"),
         )
 
         response = calculate_score(metrics)
 
+        self.assertEqual(response.raw_score, 40)
         self.assertEqual(response.score, 39)
         self.assertTrue(response.explanation.negative_factors)
 

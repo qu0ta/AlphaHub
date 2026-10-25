@@ -7,6 +7,7 @@ import { Card, StateMessage } from "../../components/ui/Card";
 import { Timeline } from "../../components/ui/Timeline";
 import { usePolling, useResource } from "../../hooks/useResource";
 import { formatDateAt, formatMoney, formatRate, formatTerm } from "../../lib/format";
+import { DECLINE_REASON_LABELS } from "../../lib/labels";
 import { useAuth } from "../../state/auth";
 import { useProducts } from "../../state/products";
 import { CompanyCreditCard, DocumentsCard, FinanceCard, ScoringCard } from "./parts";
@@ -79,6 +80,12 @@ export function BankApplicationPage() {
               {app.decision.type === "APPROVE" && lastOffer && (
                 <p className="muted">
                   Последнее предложение: {formatMoney(lastOffer.amount)} · {formatTerm(lastOffer.term)} · {formatRate(lastOffer.rate)}
+                </p>
+              )}
+              {lastOffer?.status === "DECLINED" && (
+                <p className="muted">
+                  Клиент отклонил предложение{lastOffer.declineReason ? `: ${DECLINE_REASON_LABELS[lastOffer.declineReason]}` : ""}
+                  {lastOffer.declineComment ? ` — «${lastOffer.declineComment}»` : ""}
                 </p>
               )}
             </div>

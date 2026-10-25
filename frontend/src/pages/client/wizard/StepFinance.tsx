@@ -70,13 +70,22 @@ export function StepFinance({
   };
 
   /**
-   * «Убрать PDF»: очищаем файл и таблицу на экране — снова появляется пустая зона загрузки.
-   * Удаления документа в API нет: на сервере прежние данные остаются, пока не загружен
-   * новый PDF (он их перезапишет). Без файла «Продолжить» не пропустит — валидация шага.
+   * «Убрать PDF»: бэкенд удаляет файл и извлечённые из него финансы,
+   * на экране снова появляется пустая зона загрузки.
+   * Без файла «Продолжить» не пропустит — это проверяет валидация шага.
    */
-  const remove = () => {
+  const [removing, setRemoving] = useState(false);
+  const remove = async () => {
+    if (!app.document) return;
     setUploadError(null);
-    onReplace({ ...app, document: null, financials: null, editedCells: [], dataConfirmed: false });
+    setRemoving(true);
+    try {
+      onReplace(await applicationsApi.removeFinancialDocument(token, app.id, app.document.id));
+    } catch (reason) {
+      setUploadError(reason instanceof ApiError ? reason.serverText : "Не удалось убрать файл");
+    } finally {
+      setRemoving(false);
+    }
   };
 
   const updateCell = (period: string, field: FinanceField, value: number | null) => {
@@ -116,7 +125,7 @@ export function StepFinance({
           }
           actions={
             !processing && (
-              <button type="button" className="text-link" onClick={remove}>
+              <button type="button" className="text-link" disabled={removing} onClick={() => void remove()}>
                 <Trash2 size={16} aria-hidden="true" />
                 Убрать PDF
               </button>

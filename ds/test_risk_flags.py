@@ -67,7 +67,7 @@ class RiskFlagTests(unittest.TestCase):
         result = score_application(data)
 
         # Падение на 21% может сочетаться с высоким score.
-        self.assertEqual(result.score, 75)
+        self.assertEqual(result.score, 79)
 
         self.assertEqual(
             set(result.model_dump()),

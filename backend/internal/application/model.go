@@ -64,11 +64,17 @@ type ClientOffer struct {
 	ValidUntil            time.Time  `json:"valid_until"`
 	RespondedAt           *time.Time `json:"responded_at"`
 	RespondedByUserID     *string    `json:"responded_by_user_id"`
+	DeclineReason         *string    `json:"decline_reason"`
+	DeclineComment        *string    `json:"decline_comment"`
 }
 
+// OfferResponseRequest — ответ клиента на предложение.
+// Для DECLINE можно указать причину (RATE, AMOUNT, TERM, OTHER) и комментарий — их видит банк.
 type OfferResponseRequest struct {
-	DataVersion int    `json:"data_version"`
-	Action      string `json:"action"`
+	DataVersion    int    `json:"data_version"`
+	Action         string `json:"action"`
+	DeclineReason  string `json:"decline_reason,omitempty"`
+	DeclineComment string `json:"decline_comment,omitempty"`
 }
 
 type OfferResponse struct {

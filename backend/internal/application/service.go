@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -164,6 +165,19 @@ func (s *Service) RespondOffer(ctx context.Context, id, offerID, user string, re
 		return nil, err
 	}
 	if req.DataVersion < 1 || (req.Action != "ACCEPT" && req.Action != "DECLINE") {
+		return nil, ErrInvalidInput
+	}
+	req.DeclineReason = strings.ToUpper(strings.TrimSpace(req.DeclineReason))
+	req.DeclineComment = strings.TrimSpace(req.DeclineComment)
+	if req.Action == "ACCEPT" && (req.DeclineReason != "" || req.DeclineComment != "") {
+		return nil, ErrInvalidInput
+	}
+	switch req.DeclineReason {
+	case "", "RATE", "AMOUNT", "TERM", "OTHER":
+	default:
+		return nil, ErrInvalidInput
+	}
+	if utf8.RuneCountInString(req.DeclineComment) > 2000 {
 		return nil, ErrInvalidInput
 	}
 	return s.repo.RespondOffer(ctx, uuid.MustParse(id).String(), uuid.MustParse(offerID).String(), uuid.MustParse(user).String(), req)

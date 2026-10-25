@@ -193,6 +193,19 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Download(w http.ResponseWriter, r *http.Request) { h.download(w, r, "CLIENT") }
+
+// Delete — DELETE /applications/{id}/documents/{documentID}: только владелец и только черновик.
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requestUserID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.service.Delete(r.Context(), r.PathValue("id"), r.PathValue("documentID"), userID); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 func (h *Handler) DownloadBank(w http.ResponseWriter, r *http.Request) {
 	h.download(w, r, "BANK_EMPLOYEE")
 }

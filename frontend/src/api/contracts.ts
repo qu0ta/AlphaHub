@@ -7,6 +7,8 @@ export interface ApiCompany {
   business_type: string;
   registration_date: string;
   main_okved: string;
+  /** Должность представителя — только в ответах для своей компании */
+  representative_position?: string | null;
 }
 
 export function fromApiCompany(row: ApiCompany): Company {

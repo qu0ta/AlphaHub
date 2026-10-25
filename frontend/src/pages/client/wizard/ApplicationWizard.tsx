@@ -71,6 +71,7 @@ export function ApplicationWizard() {
             ...current,
             document: fresh.document,
             financials: fresh.financials,
+            // После удаления PDF платёж тоже сбрасывается на бэкенде — оставляем введённый на экране
             debtPayment: fresh.debtPayment ?? current.debtPayment,
             editedCells: fresh.editedCells,
             dataConfirmed: false,

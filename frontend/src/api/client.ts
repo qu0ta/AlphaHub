@@ -10,7 +10,7 @@
  * Подписание и выдача кредита на бэкенде не реализованы — после принятия
  * предложения их шаги показываются по времени (см. mapStatus в backend.ts).
  */
-import { PURPOSE_LABELS } from "../lib/labels";
+import { POSITION_LABELS, positionText, PURPOSE_LABELS } from "../lib/labels";
 import { localUi } from "../lib/localStore";
 import type {
   Application,
@@ -21,6 +21,7 @@ import type {
   FinancialDocument,
   Product,
   RegistryCompany,
+  RepresentativePosition,
   Role,
   User,
 } from "../types";
@@ -146,6 +147,19 @@ export const productsApi = {
 
 /* ---------- Компания ---------- */
 
+/** Должность с бэкенда хранится текстом: «Генеральный директор» → director, свой текст → other. */
+function parsePosition(text: string | null | undefined): { position: RepresentativePosition; other: string } {
+  const value = (text ?? "").trim();
+  if (!value) return { position: "director", other: "" };
+  const code = (Object.keys(POSITION_LABELS) as RepresentativePosition[]).find((key) => key !== "other" && POSITION_LABELS[key] === value);
+  return code ? { position: code, other: "" } : { position: "other", other: value };
+}
+
+const withRepresentative = (row: ApiCompany, name: string): Company => {
+  const { position, other } = parsePosition(row.representative_position);
+  return { ...fromApiCompany(row), representativeName: name, representativePosition: position, representativePositionOther: other };
+};
+
 export const companyApi = {
   /** Поиск по ИНН в базе сервиса (реестр компаний смоделирован на бэкенде). */
   async lookup(inn: string, token?: string | null): Promise<RegistryCompany> {
@@ -159,7 +173,6 @@ export const companyApi = {
 
   /** Компания текущего пользователя или null, если он ещё не привязан. */
   async get(token: string | null): Promise<Company | null> {
-    const userId = currentUserId(token);
     let row: ApiCompany;
     try {
       row = await request<ApiCompany>("/company/me", auth(token));
@@ -167,22 +180,17 @@ export const companyApi = {
       if (isNotFound(reason)) return null;
       throw reason;
     }
-    const company = fromApiCompany(row);
-    const representative = localUi.getRepresentative(userId);
-    return {
-      ...company,
-      representativeName: representative?.name || (await request<ApiUser>("/auth/me", auth(token))).fullName,
-      representativePosition: representative?.position ?? "director",
-      representativePositionOther: representative?.positionOther ?? "",
-    };
+    // Представитель — сам пользователь: ФИО из профиля, должность — из компании (users.company_position)
+    const me = await request<ApiUser>("/auth/me", auth(token));
+    return withRepresentative(row, me.fullName);
   },
 
   /**
    * POST /company создаёт компанию или, если ИНН уже есть в базе, привязывает к существующей.
-   * Должность представителя API не хранит — запоминаем её в браузере.
+   * Уже привязанному пользователю меняем только должность: PATCH /company/me.
    */
   async save(token: string | null, company: Company): Promise<Company> {
-    const userId = currentUserId(token);
+    const position = positionText(company.representativePosition, company.representativePositionOther.trim());
     let linked: ApiCompany | null = null;
     try {
       linked = await request<ApiCompany>("/company/me", auth(token));
@@ -190,9 +198,9 @@ export const companyApi = {
       if (!isNotFound(reason)) throw reason;
     }
     if (linked && linked.inn !== company.inn) throw new ApiError(409, "Вы уже привязаны к другой компании");
-    const row =
-      linked ??
-      (await request<ApiCompany>("/company", {
+    const row = linked
+      ? await request<ApiCompany>("/company/me", { method: "PATCH", ...auth(token), body: JSON.stringify({ representative_position: position }) })
+      : await request<ApiCompany>("/company", {
         method: "POST",
         ...auth(token),
         body: JSON.stringify({
@@ -201,19 +209,10 @@ export const companyApi = {
           business_type: company.businessType === "IP" ? "ИП" : "ООО",
           registration_date: company.registrationDate,
           main_okved: company.okvedCode,
+          representative_position: position,
         }),
-      }));
-    localUi.setRepresentative(userId, {
-      name: company.representativeName,
-      position: company.representativePosition,
-      positionOther: company.representativePositionOther,
-    });
-    return {
-      ...fromApiCompany(row),
-      representativeName: company.representativeName,
-      representativePosition: company.representativePosition,
-      representativePositionOther: company.representativePositionOther,
-    };
+      });
+    return withRepresentative(row, company.representativeName);
   },
 };
 
@@ -364,6 +363,13 @@ export const applicationsApi = {
     return loadApplication(token, id);
   },
 
+  /** Удаление PDF черновика: бэкенд удаляет файл и извлечённые из него финансы. */
+  async removeFinancialDocument(token: string | null, id: string, documentId: string): Promise<Application> {
+    await request(`${appPath(id)}/documents/${encodeURIComponent(documentId)}`, { method: "DELETE", ...auth(token) });
+    localUi.setEditedCells(id, []);
+    return loadApplication(token, id);
+  },
+
   async saveFinancials(token: string | null, id: string, debtPayment: number, financials: FinanceMonth[]): Promise<Application> {
     await putFinancials(token, id, debtPayment, financials);
     return loadApplication(token, id);
@@ -407,13 +413,19 @@ export const applicationsApi = {
   acceptOffer: (token: string | null, id: string) => respondToOffer(token, id, "ACCEPT"),
 
   /**
-   * Отказ от предложения. Причину бэкенд пока не принимает, а повторного
-   * рассмотрения (экран 18) на бэкенде нет — отказ окончательный.
+   * Отказ от предложения с причиной и комментарием — их видит сотрудник банка.
+   * Повторного рассмотрения (экран 18) на бэкенде нет — отказ окончательный.
    */
-  declineOffer: (token: string | null, id: string, _reason: DeclineReason, _comment: string) => respondToOffer(token, id, "DECLINE"),
+  declineOffer: (token: string | null, id: string, reason: DeclineReason, comment: string) =>
+    respondToOffer(token, id, "DECLINE", { decline_reason: reason.toUpperCase(), decline_comment: comment.trim() }),
 };
 
-async function respondToOffer(token: string | null, id: string, action: "ACCEPT" | "DECLINE"): Promise<Application> {
+async function respondToOffer(
+  token: string | null,
+  id: string,
+  action: "ACCEPT" | "DECLINE",
+  extra: { decline_reason?: string; decline_comment?: string } = {},
+): Promise<Application> {
   const [row, offers] = await Promise.all([
     request<BackendApplication>(appPath(id), auth(token)),
     request<BackendOffer[]>(`${appPath(id)}/offers`, auth(token)),
@@ -423,7 +435,7 @@ async function respondToOffer(token: string | null, id: string, action: "ACCEPT"
   await request(`${appPath(id)}/offers/${encodeURIComponent(pending.id)}/respond`, {
     method: "POST",
     ...auth(token),
-    body: JSON.stringify({ data_version: row.data_version, action }),
+    body: JSON.stringify({ data_version: row.data_version, action, ...extra }),
   });
   return loadApplication(token, id);
 }

@@ -109,6 +109,27 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(toResponse(c))
 }
+// UpdateMe — PATCH /company/me: должность представителя текущего пользователя.
+func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req PositionRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	c, err := h.service.UpdatePosition(r.Context(), user.ID, req)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(toResponse(c))
+}
+
 func (h *Handler) GetByINN(w http.ResponseWriter, r *http.Request) {
 	inn := r.PathValue("inn")
 

@@ -206,6 +206,52 @@ func (r *PostgresRepository) PrepareUpload(ctx context.Context, applicationID, u
 	return &result, nil
 }
 
+// Delete удаляет документ черновика вместе с финансами, извлечёнными из него.
+// Версия заявки увеличивается: прежнее подтверждение финансов перестаёт действовать.
+// Возвращает storage_key, чтобы сервис удалил сам файл после фиксации транзакции.
+func (r *PostgresRepository) Delete(ctx context.Context, appID, docID, userID string) (string, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("begin document delete: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	err = tx.QueryRow(ctx, `SELECT status FROM applications WHERE id=$1 AND created_by_user_id=$2 FOR UPDATE`, appID, userID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("lock application for document delete: %w", err)
+	}
+	if status != "DRAFT" {
+		return "", ErrNotDraft
+	}
+
+	var storageKey string
+	err = tx.QueryRow(ctx, `SELECT storage_key FROM documents WHERE id=$1 AND application_id=$2`, docID, appID).Scan(&storageKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrDocumentNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("read document for delete: %w", err)
+	}
+
+	if _, err = tx.Exec(ctx, `DELETE FROM financial_records WHERE application_id=$1 AND source_document_id=$2`, appID, docID); err != nil {
+		return "", fmt.Errorf("delete document financials: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM documents WHERE id=$1 AND application_id=$2`, docID, appID); err != nil {
+		return "", fmt.Errorf("delete document: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `UPDATE applications SET data_version=data_version+1, updated_at=now() WHERE id=$1`, appID); err != nil {
+		return "", fmt.Errorf("bump application version: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("commit document delete: %w", err)
+	}
+	return storageKey, nil
+}
+
 func (r *PostgresRepository) GetForDownload(ctx context.Context, appID, docID, user, role string) (*DownloadMetadata, error) {
 	var result DownloadMetadata
 	err := r.pool.QueryRow(ctx, `SELECT d.id,d.application_id,d.document_type,d.original_filename,d.processing_status,d.uploaded_at,d.storage_key

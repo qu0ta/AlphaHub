@@ -89,10 +89,11 @@ func (r *PostgresRepository) CreateForUser(ctx context.Context, userID string, c
 
 	result, err := tx.Exec(ctx, `
     UPDATE users
-    SET company_id = $1
+    SET company_id = $1,
+        company_position = COALESCE($3, company_position)
     WHERE id = $2
       AND company_id IS NULL
-`, created.ID, userID)
+`, created.ID, userID, company.Position)
 	if err != nil {
 		return nil, fmt.Errorf("link company to user: %w", err)
 	}
@@ -102,19 +103,22 @@ func (r *PostgresRepository) CreateForUser(ctx context.Context, userID string, c
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit company creation: %w", err)
 	}
+	created.Position = company.Position
 	return created, nil
 }
 
 func (r *PostgresRepository) GetByUserID(ctx context.Context, userID string) (*Company, error) {
 	const query = `
-		SELECT ` + companyColumns + `
+		SELECT ` + companyColumns + `, u.company_position
 		FROM companies AS c
 		JOIN users AS u ON u.company_id = c.id
 		WHERE u.id = $1
 	`
 
-	company, err := scanCompany(
-		r.pool.QueryRow(ctx, query, userID),
+	var company Company
+	err := r.pool.QueryRow(ctx, query, userID).Scan(
+		&company.ID, &company.INN, &company.Name, &company.BusinessType,
+		&company.RegistrationDate, &company.MainOKVED, &company.Position,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -124,7 +128,21 @@ func (r *PostgresRepository) GetByUserID(ctx context.Context, userID string) (*C
 		return nil, fmt.Errorf("get user company: %w", err)
 	}
 
-	return company, nil
+	return &company, nil
+}
+
+// UpdatePosition меняет должность представителя у пользователя, привязанного к компании.
+func (r *PostgresRepository) UpdatePosition(ctx context.Context, userID string, position *string) error {
+	result, err := r.pool.Exec(ctx,
+		`UPDATE users SET company_position = $2 WHERE id = $1 AND company_id IS NOT NULL`,
+		userID, position)
+	if err != nil {
+		return fmt.Errorf("update company position: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 func (r *PostgresRepository) GetByINN(ctx context.Context, inn string) (*Company, error) {
 	const query = `

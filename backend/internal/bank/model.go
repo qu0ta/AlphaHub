@@ -159,6 +159,9 @@ type Offer struct {
 	Status                string    `json:"status"`
 	CreatedAt             time.Time `json:"created_at"`
 	ValidUntil            time.Time `json:"valid_until"`
+	// Причина и комментарий, если клиент отклонил предложение
+	DeclineReason  *string `json:"decline_reason,omitempty"`
+	DeclineComment *string `json:"decline_comment,omitempty"`
 }
 
 type DecisionResult struct {

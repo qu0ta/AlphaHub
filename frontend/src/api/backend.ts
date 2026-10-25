@@ -53,6 +53,8 @@ export interface BackendOffer {
   responded_at?: string | null;
   comment?: string;
   decision_type?: string;
+  decline_reason?: string | null;
+  decline_comment?: string | null;
 }
 
 export interface BackendInfoRequest {
@@ -203,6 +205,8 @@ export function toOffers(rows: BackendOffer[]): Offer[] {
       monthlyPayment: row.monthly_payment_kopecks / 100,
       validUntil: row.valid_until,
       status,
+      declineReason: (row.decline_reason?.toLowerCase() as Offer["declineReason"]) ?? undefined,
+      declineComment: row.decline_comment ?? undefined,
     };
   });
 }

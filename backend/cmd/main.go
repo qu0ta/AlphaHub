@@ -134,6 +134,10 @@ func main() {
 		clientOnly(companyHandler.GetMe),
 	)
 	mux.Handle(
+		"PATCH /api/v1/company/me",
+		clientOnly(companyHandler.UpdateMe),
+	)
+	mux.Handle(
 		"GET /api/v1/company/by-inn/{inn}",
 		clientOnly(companyHandler.GetByINN),
 	)
@@ -148,6 +152,7 @@ func main() {
 	documentHandler := documents.NewHandler(documentService)
 	mux.Handle("GET /api/v1/bank/applications/{id}/documents/{documentID}/download", bankOnly(documentHandler.DownloadBank))
 	mux.Handle("GET /api/v1/applications/{id}/documents/{documentID}/download", clientOnly(documentHandler.Download))
+	mux.Handle("DELETE /api/v1/applications/{id}/documents/{documentID}", clientOnly(documentHandler.Delete))
 
 	mux.Handle(
 		"POST /api/v1/applications/{id}/documents",
