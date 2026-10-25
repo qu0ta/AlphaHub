@@ -202,6 +202,7 @@ func (r *PostgresRepository) Update(
 func (r *PostgresRepository) Confirm(
 	ctx context.Context,
 	applicationID, userID string,
+	expectedVersion int,
 ) (*Financials, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -219,6 +220,10 @@ func (r *PostgresRepository) Confirm(
           AND created_by_user_id = $2
         FOR UPDATE
     `, applicationID, userID).Scan(&status, &appVersion)
+
+	if appVersion != expectedVersion {
+		return nil, ErrVersionConflict
+	}
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound

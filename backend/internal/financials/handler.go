@@ -99,7 +99,13 @@ func (h *Handler) Confirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.service.Confirm(r.Context(), r.PathValue("id"), uid)
+	var req ConfirmRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.service.Confirm(r.Context(), r.PathValue("id"), uid, req.DataVersion)
 	if err != nil {
 		writeError(w, err)
 		return

@@ -34,3 +34,6 @@ type UpdateRequest struct {
 	DeclaredMonthlyDebtPaymentKopecks *int64  `json:"declared_monthly_debt_payment_kopecks"`
 	Financials                        []Month `json:"financials"`
 }
+type ConfirmRequest struct {
+	DataVersion int `json:"data_version"`
+}
