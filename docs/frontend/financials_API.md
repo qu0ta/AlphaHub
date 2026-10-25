@@ -10,16 +10,16 @@
 
 ## Модель ответа
 
-| Поле | Тип | Значение |
-|---|---|---|
-| application_id | string | UUID заявки |
-| data_version | integer | Текущая версия заявки; передавать в PUT |
-| financial_data_version | integer | Версия возвращённого набора финансов; передавать в поле data_version запроса confirm |
-| is_confirmation_current | boolean | Подтверждён ли набор финансов для текущей версии заявки |
-| declared_monthly_debt_payment_kopecks | integer или null | Заявленный ежемесячный платёж по долгам |
-| financials | Month[] | Финансовые данные |
-| confirmed_at | string или null | Время подтверждения RFC 3339 |
-| confirmed_by_user_id | string или null | UUID подтвердившего пользователя |
+| Поле                                  | Тип              | Значение                                                                             |
+|---------------------------------------|------------------|--------------------------------------------------------------------------------------|
+| application_id                        | string           | UUID заявки                                                                          |
+| data_version                          | integer          | Текущая версия заявки; передавать в PUT                                              |
+| financial_data_version                | integer          | Версия возвращённого набора финансов; передавать в поле data_version запроса confirm |
+| is_confirmation_current               | boolean          | Подтверждён ли набор финансов для текущей версии заявки                              |
+| declared_monthly_debt_payment_kopecks | integer или null | Заявленный ежемесячный платёж по долгам                                              |
+| financials                            | Month[]          | Финансовые данные                                                                    |
+| confirmed_at                          | string или null  | Время подтверждения RFC 3339                                                         |
+| confirmed_by_user_id                  | string или null  | UUID подтвердившего пользователя                                                     |
 
 Month содержит period_month (строка YYYY-MM), revenue_kopecks, operating_inflow_kopecks, operating_outflow_kopecks, tax_outflow_kopecks (целые неотрицательные int64, копейки). Для JavaScript учитывайте предел Number.MAX_SAFE_INTEGER.
 
@@ -35,7 +35,7 @@ is_confirmation_current вычисляется как: ровно шесть м�
 
 ## PUT /api/v1/applications/{id}/financials
 
-Сохраняет полный набор из шести разных месяцев. Только DRAFT. Content-Type: application/json.
+Сохраняет полный набор из шести разных месяцев. Только DRAFT или NEEDS_INFO. Content-Type: application/json.
 
 ```json
 {
@@ -60,7 +60,7 @@ is_confirmation_current вычисляется как: ровно шесть м�
 
 ## POST /api/v1/applications/{id}/financials/confirm
 
-Подтверждает просмотренный пользователем набор финансов. Только DRAFT. Обязательное JSON-тело, Content-Type: application/json:
+Подтверждает просмотренный пользователем набор финансов. Только DRAFT или NEEDS_INFO. Обязательное JSON-тело, Content-Type: application/json:
 
 ```json
 {"data_version": 2}
@@ -76,16 +76,16 @@ is_confirmation_current вычисляется как: ровно шесть м�
 
 ## Ошибки
 
-| HTTP | Текст | Причина |
-|---|---|---|
-| 400 | Invalid request body | Некорректный JSON PUT/confirm, неизвестные поля или превышение 16 KiB |
-| 400 | Invalid financial input | Некорректный UUID или финансовые данные; при confirm нет шести записей текущей версии |
-| 401 | Зависит от auth middleware | Отсутствующий, неверный или истёкший JWT |
-| 403 | Access denied | Роль отличается от CLIENT |
-| 404 | Financial data or application not found | Нет доступа, заявки или сохранённых финансов |
-| 409 | Application is not a draft | PUT/confirm для заявки не в DRAFT |
-| 409 | Application version conflict | Несовпадение ожидаемой версии в PUT/confirm; в confirm также отсутствующая, null или неположительная версия |
-| 500 | Internal server error | Ошибка БД |
+| HTTP | Текст                                   | Причина                                                                                                     |
+|------|-----------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| 400  | Invalid request body                    | Некорректный JSON PUT/confirm, неизвестные поля или превышение 16 KiB                                       |
+| 400  | Invalid financial input                 | Некорректный UUID или финансовые данные; при confirm нет шести записей текущей версии                       |
+| 401  | Зависит от auth middleware              | Отсутствующий, неверный или истёкший JWT                                                                    |
+| 403  | Access denied                           | Роль отличается от CLIENT                                                                                   |
+| 404  | Financial data or application not found | Нет доступа, заявки или сохранённых финансов                                                                |
+| 409  | Application is not a draft              | PUT/confirm для заявки не в DRAFT/NEEDS_INFO                                                                           |
+| 409  | Application version conflict            | Несовпадение ожидаемой версии в PUT/confirm; в confirm также отсутствующая, null или неположительная версия |
+| 500  | Internal server error                   | Ошибка БД                                                                                                   |
 
 ## Последовательность для фронтенда
 
@@ -100,3 +100,7 @@ is_confirmation_current вычисляется как: ровно шесть м�
 ## Границы реализации
 
 Ручной PUT финансов не вызывает DS и не читает PDF. Подтверждение само по себе не запускает скоринг. В текущем backend загрузка PDF вызывает DS extraction и сохраняет финансовые данные, а submit проверяет подтверждение финансов текущей версии перед дальнейшей обработкой. Подробные ошибки и поведение этих операций относятся к контрактам документов и заявок.
+
+## Дополнительные данные
+
+В NEEDS_INFO разрешены PUT и confirm с теми же проверками версии. После исправления финансов или загрузки FINANCIAL_STATEMENT нужно подтвердить новую финансовую версию. Затем вызывается клиентский info-requests/{requestID}/respond: он повторно рассчитывает скоринг и возвращает заявку назначенному сотруднику в MANUAL. SUPPORTING_DOCUMENT не изменяет финансы и их подтверждение.
