@@ -144,11 +144,13 @@ func TestDSWorkflow(t *testing.T) {
 	apps := application.NewService(application.NewPostgresRepository(pool, client))
 	docs := documents.NewService(documents.NewRepository(pool), documents.NewLocalStorage(t.TempDir()), client)
 	fins := financials.NewService(financials.NewRepository(pool))
+
 	app, err := apps.Create(ctx, userID, application.CreateRequest{ProductCode: "test"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	amount, term, purpose := int64(50000000), 12, "Working capital"
+
 	app, err = apps.Update(ctx, app.ID, userID, application.UpdateRequest{CompanyID: &companyID, RequestedAmountKopecks: &amount, RequestedTermMonths: &term, Purpose: &purpose, DataVersion: &app.DataVersion})
 	if err != nil {
 		t.Fatal(err)
@@ -179,8 +181,21 @@ func TestDSWorkflow(t *testing.T) {
 	if scoringCalls.Load() != 0 {
 		t.Fatal("unconfirmed financials reached DS")
 	}
-	if _, err = fins.Confirm(ctx, app.ID, userID); err != nil {
+	if fin.FinancialDataVersion != fin.DataVersion || fin.IsConfirmationCurrent {
+		t.Fatalf("wrong unconfirmed financial version: %+v", fin)
+	}
+	if _, err = fins.Confirm(ctx, app.ID, userID, fin.FinancialDataVersion-1); !errors.Is(err, financials.ErrVersionConflict) {
+		t.Fatalf("stale confirmation accepted: %v", err)
+	}
+	if _, err = fins.Confirm(ctx, uuid.NewString(), userID, fin.FinancialDataVersion); !errors.Is(err, financials.ErrNotFound) {
+		t.Fatalf("missing application should return not found: %v", err)
+	}
+	confirmed, err := fins.Confirm(ctx, app.ID, userID, fin.FinancialDataVersion)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !confirmed.IsConfirmationCurrent || confirmed.FinancialDataVersion != fin.FinancialDataVersion {
+		t.Fatalf("wrong confirmed financial version: %+v", confirmed)
 	}
 	fail.Store(true)
 	if _, err = apps.Submit(ctx, app.ID, userID); err == nil {
