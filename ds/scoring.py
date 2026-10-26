@@ -49,7 +49,7 @@ def interpolate_points(value: Decimal, anchors) -> int:
 
 def calculate_score_from_metrics(
     metrics: FinancialMetrics,
-) -> DetailedScoringResponse:    
+) -> DetailedScoringResponse:
     positive = []
     negative = []
 

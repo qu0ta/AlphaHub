@@ -114,7 +114,7 @@ def calculate_financial_metrics(
             flags.append("ZERO_REVENUE_BASE")
         else:
             growth = revenue_change / early_revenue
-            
+
         # Диагностический признак, а не решение по заявке.
         if growth is not None and growth < Decimal("-0.20"):
             flags.append("REVENUE_DECLINE_GT_20_PERCENT")

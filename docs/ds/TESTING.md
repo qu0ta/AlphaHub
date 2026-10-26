@@ -1,7 +1,7 @@
 # Проверка подключения Go → DS
 
-В backend/.env: DS_BASE_URL=http://192.168.1.104:8000 (без /api/v1).
-Перед запуском нужна применённая миграция 16. Новых миграций подключение не требует.
+В backend/.env: DS_BASE_URL=http://localhost:8001 (без /api/v1).
+Перед запуском примените актуальные миграции по корневому README.
 Перезапустите Go после изменения кода/env. Все запросы к Go ниже требуют Bearer JWT клиента.
 
 1. Создать черновик: POST /api/v1/applications с {"product_code":"<код продукта>"}.
@@ -18,7 +18,7 @@
 ```
 
 Сумма и срок должны попадать в ограничения продукта. ИНН компании обязан совпадать с PDF.
-Ставка берётся из products.base_annual_rate_bps; дата задаётся Go при подаче в UTC.
+Ставка фиксируется из каталога в applications.annual_rate_bps при создании заявки; при расчёте используются эта ставка и первоначальная дата подачи в UTC.
 Отдельно отправлять эти четыре поля в extract не нужно.
 
 3. POST /api/v1/applications/{id}/documents: Body → form-data, file типа File, выбрать PDF.
@@ -26,8 +26,8 @@
 4. GET /api/v1/applications/{id}/financials: проверить извлечение и актуальную data_version.
 5. Если нужны исправления: PUT на тот же URL с data_version из GET, financials и
    declared_monthly_debt_payment_kopecks. После исправления версия увеличивается.
-6. POST /api/v1/applications/{id}/financials/confirm без тела.
-7. POST /api/v1/applications/{id}/submit без тела. Ожидается SUBMITTED.
+6. POST /api/v1/applications/{id}/financials/confirm с JSON {"data_version":N}, где N — актуальная версия заявки.
+7. POST /api/v1/applications/{id}/submit без тела. Итоговый статус — REJECTED при score < 40, MANUAL при 40–69 либо OFFERED при score ≥ 70. Проверенные демо-условия v2 — в [DEMO_DATA.md](../DEMO_DATA.md).
 8. GET /api/v1/applications/{id}/scoring: score, explanation, model_version и features_snapshot.
 
 Для подачи в октябре 2026 нужны месяцы апрель–сентябрь 2026. При другой дате нужен
@@ -57,8 +57,8 @@ httptest: проверяются multipart, сборка JSON, подтверж�
 Для живого скоринга:
 
 ```powershell
-$env:DS_BASE_URL = "http://192.168.1.104:8000"
+$env:DS_BASE_URL = "http://localhost:8001"
 go test ./internal/dsclient -run '^TestLiveScoring$' -count=1 -v
 ```
 
-Этот тест отправляет фиксированные месяцы апрель–сентябрь 2026 и ожидает score=90.
+Этот тест отправляет фиксированные месяцы апрель–сентябрь 2026 и ожидает score=90. Для проверки текущих PDF и опубликованных примеров из ds/ выполните `python -m unittest test_demo_scenarios`.

@@ -880,7 +880,7 @@ file: <binary PDF>
 
 Доступ: CLIENT + Bearer. Успех: **200**.
 
-Возвращает последний сохранённый результат владельцу заявки: сортировка created_at DESC, id DESC. features_snapshot — реально отправленный JSON. risk_band сохраняется UNASSESSED, но в этот ответ не входит. Новый расчёт не запускается. Значение score в примере иллюстративное, это не обещание расчёта для приведённых чисел.
+Возвращает последний сохранённый результат владельцу заявки: сортировка created_at DESC, id DESC. features_snapshot — реально отправленный JSON. risk_band сохраняется UNASSESSED, но в этот ответ не входит. Новый расчёт не запускается. Ответ в примере соответствует приведённому features_snapshot и правилам financial_rules_v2; ранее сохранённые результаты могут иметь другую model_version.
 
 **Запрос**
 
@@ -890,16 +890,15 @@ file: <binary PDF>
 
 ```json
 {
-  "score": 65,
+  "score": 90,
   "explanation": {
     "positive_factors": [
-      "Положительный денежный поток"
+      "Денежный поток покрывает кредитные платежи как минимум вдвое",
+      "Низкая изменчивость выручки"
     ],
-    "negative_factors": [
-      "Высокая долговая нагрузка"
-    ]
+    "negative_factors": []
   },
-  "model_version": "financial_rules_v1",
+  "model_version": "financial_rules_v2",
   "data_version": 3,
   "features_snapshot": {
     "inn": "7700000023",
@@ -1099,16 +1098,15 @@ file: <binary PDF>
 
 ```json
 {
-  "score": 65,
+  "score": 90,
   "explanation": {
     "positive_factors": [
-      "Положительный денежный поток"
+      "Денежный поток покрывает кредитные платежи как минимум вдвое",
+      "Низкая изменчивость выручки"
     ],
-    "negative_factors": [
-      "Высокая долговая нагрузка"
-    ]
+    "negative_factors": []
   },
-  "model_version": "financial_rules_v1"
+  "model_version": "financial_rules_v2"
 }
 ```
 
@@ -1461,7 +1459,7 @@ HTTP_PORT необязателен. PDF хранятся в uploads относи
 ReadHeaderTimeout Go — 5 секунд; это не полный таймаут обработки запроса.
 
 В этом сеансе до создания документа прошли go test ./..., go vet ./... и TestDSWorkflow с изолированной схемой
-PostgreSQL и тестовым HTTP DS. Живой TestLiveScoring получил score=90, model=financial_rules_v1.
+PostgreSQL и тестовым HTTP DS. Исторический живой TestLiveScoring получил score=90, model=financial_rules_v1; текущие примеры выше пересчитаны для financial_rules_v2.
 Это подтверждает проверенные сценарии, но не означает, что каждый маршрут из справочника вызван на живом сервере.
 Документ составлен статически по маршрутам, DTO, handlers, services, repositories и Python schemas.
 

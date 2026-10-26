@@ -100,12 +100,12 @@ GET {{base}}/applications/{{id}}
 Authorization: Bearer {{clientToken}}
 
 
-### Сохранить условия medium
+### Сохранить условия medium: 1 млн ₽ / 18 мес. → 57 баллов, MANUAL в v2
 PATCH {{base}}/applications/{{id}}
 Authorization: Bearer {{clientToken}}
 Content-Type: application/json
 
-{"company_id":"{{companyID}}","requested_amount_kopecks":50000000,"requested_term_months":18,"purpose":"Пополнение оборотных средств","data_version":{{version}}}
+{"company_id":"{{companyID}}","requested_amount_kopecks":100000000,"requested_term_months":18,"purpose":"Пополнение оборотных средств","data_version":{{version}}}
 
 ### Мои заявки
 GET {{base}}/applications

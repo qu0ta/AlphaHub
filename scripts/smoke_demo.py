@@ -12,6 +12,13 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = "AlphaHubTest2026!"
+MODEL_VERSION = "financial_rules_v2"
+DEMO_MONTH = "2026-10"
+DEMO_PROFILES = {
+    "stable": ("client@demo.ru", "7700000016", 200000000, 12, 83, "OFFERED"),
+    "medium": ("medium@demo.ru", "7700000023", 100000000, 18, 57, "MANUAL"),
+    "risky": ("risky@demo.ru", "7700000030", 500000000, 12, 16, "REJECTED"),
+}
 
 
 def main():
@@ -51,14 +58,10 @@ def main():
     def login(email):
         return request("POST", "/auth/login", body={"email": email, "password": PASSWORD})["access_token"]
 
-    profiles = {
-        "stable": ("client@demo.ru", "7700000016", 200000000, 12, 75, "OFFERED"),
-        "medium": ("medium@demo.ru", "7700000023", 50000000, 18, 65, "MANUAL"),
-        "risky": ("risky@demo.ru", "7700000030", 500000000, 12, 15, "REJECTED"),
-    }
+    profiles = DEMO_PROFILES
     # Fixed committed PDFs are valid for submissions in October 2026 only.
     # Fail clearly instead of falsifying the server's application date.
-    assert datetime.now(timezone.utc).strftime("%Y-%m") == "2026-10", (
+    assert datetime.now(timezone.utc).strftime("%Y-%m") == DEMO_MONTH, (
         "Committed PDFs cover April-September 2026. Generate fresh demo PDFs and "
         "update expected profiles before running outside October 2026; see docs/DEMO_DATA.md."
     )
@@ -96,6 +99,7 @@ def main():
         request("POST", path + "/financials/confirm", token, {"data_version": version(app_id, token)})
         app = request("POST", path + "/submit", token)
         scoring = request("GET", path + "/scoring", token)
+        assert scoring["model_version"] == MODEL_VERSION, scoring
         assert (app["status"], scoring["score"]) == (status, score), (profile, app, scoring)
         request("GET", path, clients["risky"] if profile != "risky" else clients["stable"], expected=404)
         return app_id, token
@@ -110,13 +114,13 @@ def main():
 
     app_id, token = submit("stable")
     assert respond(app_id, token, "ACCEPT") == "ACCEPTED"
-    results.append({"scenario": "automatic approval and acceptance", "id": app_id, "score": 75, "status": "ACCEPTED"})
+    results.append({"scenario": "automatic approval and acceptance", "id": app_id, "score": profiles["stable"][4], "status": "ACCEPTED"})
     app_id, token = submit("stable")
     assert respond(app_id, token, "DECLINE") == "OFFER_DECLINED"
     results.append({"scenario": "client declines", "id": app_id, "status": "OFFER_DECLINED"})
     app_id, token = submit("risky")
     assert request("GET", "/applications/" + app_id + "/offers", token) == []
-    results.append({"scenario": "automatic rejection", "id": app_id, "score": 15, "status": "REJECTED"})
+    results.append({"scenario": "automatic rejection", "id": app_id, "score": profiles["risky"][4], "status": "REJECTED"})
 
     for action in ["APPROVE", "COUNTER_OFFER", "REJECT", "REQUEST_INFO"]:
         app_id, token = submit("medium")
@@ -150,7 +154,7 @@ def main():
             if action == "COUNTER_OFFER":
                 assert result["offer"]["amount_kopecks"] == 40000000
                 respond(app_id, token, "ACCEPT")
-        results.append({"scenario": action, "id": app_id, "score": 65, "status": result["status"]})
+        results.append({"scenario": action, "id": app_id, "score": profiles["medium"][4], "status": result["status"]})
     assert request("GET", "/bank/decisions", bank)["total"] >= 3
     assert request("GET", "/bank/archive", bank)["total"] >= 1
     print(json.dumps({"base_url": args.base_url, "passed": results}, ensure_ascii=False, indent=2))

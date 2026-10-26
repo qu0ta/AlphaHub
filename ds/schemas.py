@@ -45,7 +45,7 @@ class MonthlyFinancials(BaseModel):
 
 
 class ScoringInput(BaseModel):
-    # Из данных компании 
+    # Из данных компании
     inn: str
 
     # Из Application на Go

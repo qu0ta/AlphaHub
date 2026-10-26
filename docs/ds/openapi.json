@@ -203,16 +203,16 @@
                   "$ref": "#/components/schemas/ScoringResponse"
                 },
                 "example": {
-                  "score": 65,
+                  "score": 30,
                   "explanation": {
                     "positive_factors": [
-                      "Стабильная выручка"
+                      "Низкая изменчивость выручки"
                     ],
                     "negative_factors": [
-                      "Высокая долговая нагрузка"
+                      "Среднего денежного потока недостаточно для действующего и нового кредитных платежей"
                     ]
                   },
-                  "model_version": "rules-v1"
+                  "model_version": "financial_rules_v2"
                 }
               }
             }

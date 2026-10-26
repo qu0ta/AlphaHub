@@ -4,6 +4,16 @@
 
 Синтетические fixtures `ds/fixtures/{stable,medium,risky}.json` и PDF `ds/demo_pdfs/` используют фиксированные seed=42 и дату 2026-10-22. Это искусственные показатели, не сведения о реальных компаниях. Названия/ИНН служат демонстрационными идентификаторами. Генератор — `ds/generator.py`, PDF — `ds/pdf_generator.py`.
 
+Для `financial_rules_v2`, продукта `WORKING_CAPITAL` и ставки 1990 bps используйте:
+
+| PDF | Сумма, ₽ | Срок, мес. | Score | Статус |
+|---|---:|---:|---:|---|
+| stable.pdf | 2 000 000 | 12 | 83 | OFFERED |
+| medium.pdf | 1 000 000 | 18 | 57 | MANUAL |
+| risky.pdf | 5 000 000 | 12 | 16 | REJECTED |
+
+Финансовые PDF и fixtures не менялись. Для ручного сценария изменена только запрошенная сумма: прежние 500 000 ₽ / 18 мес. для medium.pdf теперь дают 73 балла и OFFERED. Ожидания smoke-скрипта проверяет `ds/test_demo_scenarios.py` через API извлечения и скоринга.
+
 Чтобы сделать свежие PDF, установите `ds/requirements-dev.txt`. Из каталога `ds/` запустите следующий Python-код (сохраните, например, как локальный `refresh_demo.py`):
 
 ```python

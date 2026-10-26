@@ -14,15 +14,15 @@
 
 ## Автоматическое одобрение и принятие
 
-Клиент client@demo.ru, stable.pdf, 200000000 коп. / 12 мес. / 1990 bps. Ожидается score=75, model_version=financial_rules_v1, OFFERED. GET offers → PENDING на запрошенных условиях, срок действия 7 дней. POST `/offers/{offerID}/respond` с action=ACCEPT и актуальной data_version → ACCEPTED и выбранный accepted_offer_id. Повтор того же ACCEPT безопасен; противоположное действие → 409. Проверить сохранение после перезагрузки API. Подпись/выдача не проверяются: серверные ручки отсутствуют.
+Клиент client@demo.ru, stable.pdf, 200000000 коп. / 12 мес. / 1990 bps. Ожидается score=83, model_version=financial_rules_v2, OFFERED. GET offers → PENDING на запрошенных условиях, срок действия 7 дней. POST `/offers/{offerID}/respond` с action=ACCEPT и актуальной data_version → ACCEPTED и выбранный accepted_offer_id. Повтор того же ACCEPT безопасен; противоположное действие → 409. Проверить сохранение после перезагрузки API. Подпись/выдача не проверяются: серверные ручки отсутствуют.
 
 ## Автоматический отказ
 
-Клиент risky@demo.ru, risky.pdf, **500000000** коп. / 12 мес. (не исходные 600000000 из DS fixture). Ожидается score=15, REJECTED; AUTO-решение REJECT и отсутствие PENDING-оффера. Балл обусловлен финансовыми данными, не технической ошибкой DS.
+Клиент risky@demo.ru, risky.pdf, **500000000** коп. / 12 мес. (не исходные 600000000 из DS fixture). Ожидается score=16, REJECTED; AUTO-решение REJECT и отсутствие PENDING-оффера. Балл обусловлен финансовыми данными, не технической ошибкой DS.
 
 ## Ручная проверка и одобрение сотрудником
 
-Клиент medium@demo.ru, medium.pdf, 50000000 коп. / 18 мес. Ожидается score=65, MANUAL.
+Клиент medium@demo.ru, medium.pdf, 100000000 коп. (1 млн ₽) / 18 мес. Ожидается score=57, model_version=financial_rules_v2, MANUAL. Прежние 50000000 коп. дают 73 балла и OFFERED, поэтому для ручных сценариев используйте 1 млн ₽.
 Войти bank@demo.ru. GET `/bank/applications/page?q=7700000023` → заявка в items, корректный total. GET карточки → компания, финансовые данные, скоринг, документы и история. POST claim с текущей версией → assigned_employee_id сотрудника. Перечитать версию, POST decisions action=APPROVE, reason_code, comment и future valid_until без offer → 201, OFFERED. Оффер повторяет запрошенные сумму/срок и сохранённую ставку.
 
 ## Встречное предложение
@@ -77,7 +77,7 @@ go test ./... -count=1
 DS: `python -m pip install -r requirements-dev.txt`. Из ds/:
 
 ```powershell
-python -m unittest test_api test_metrics test_schema_contract test_financials_api test_pdf_parser test_pdf_validation
+python -m unittest test_api test_metrics test_schema_contract test_financials_api test_pdf_parser test_pdf_validation test_demo_scenarios
 python test_profiles.py
 python test_scoring.py
 python test_score_result.py

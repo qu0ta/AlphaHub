@@ -9,8 +9,8 @@ flowchart LR
   Go -->|ScoringInput / scoring/evaluate| DS
   Go --> Files[(Volume: PDF uploads)]
   DS --> Parser[pdfplumber: текстовая таблица]
-  DS --> Rules[metrics + financial_rules_v1]
-  Migrate[golang-migrate: 1..19] --> DB
+  DS --> Rules[metrics + financial_rules_v2]
+  Migrate[golang-migrate: 1..20] --> DB
   DB --> Registry[Локальный каталог компаний]
   Demo[ЕГРЮЛ / ФНС / БКИ: демонстрационные данные] -. без внешних HTTP-интеграций .-> Browser
 ```
