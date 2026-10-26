@@ -1481,6 +1481,6 @@ TestDSWorkflow строит месяцы относительно даты за�
 ## 14. Источники сверки
 
 Go: backend/cmd/main.go; backend/internal/{auth,product,company,application,documents,financials}/{model,handler,service,repository}.go
-(у product файл repostiory.go); backend/internal/auth/middleware.go; backend/internal/dsclient/{client,validation,http_error}.go.
+(в product репозиторий находится в файле repository.go); backend/internal/auth/middleware.go; backend/internal/dsclient/{client,validation,http_error}.go.
 DS: ds/api.py, ds/financials_api.py, ds/schemas.py. Хранение: backend/migrations/*.up.sql.
 Это ссылки на исходники для поддержки документа; все необходимые клиенту формы запросов приведены выше.

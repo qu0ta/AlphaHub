@@ -125,7 +125,7 @@ def evaluate_scoring(data: ScoringInput) -> ScoringResponse:
             },
         ) from exc
 
-#для парсера
+# Маршруты извлечения финансовых данных.
 from financials_api import router as financials_router
 
 app.include_router(financials_router)
