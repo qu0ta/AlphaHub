@@ -66,6 +66,13 @@ GET {{base}}/company/me
 Authorization: Bearer {{clientToken}}
 
 
+### Изменить должность представителя (пустая строка очищает)
+PATCH {{base}}/company/me
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"representative_position":"Генеральный директор"}
+
 ### Локальный реестр
 GET {{base}}/company/by-inn/7700000023
 Authorization: Bearer {{clientToken}}
@@ -303,7 +310,7 @@ POST {{base}}/applications/{{id}}/offers/{{offerID}}/respond
 Authorization: Bearer {{clientToken}}
 Content-Type: application/json
 
-{"data_version":{{version}},"action":"DECLINE"}
+{"data_version":{{version}},"action":"DECLINE","decline_reason":"RATE","decline_comment":"Ставка слишком высокая"}
 
 ### Мои решения банка
 GET {{base}}/bank/decisions?limit=20&offset=0
@@ -319,6 +326,11 @@ Authorization: Bearer {{bankToken}}
 GET {{base}}/bank/applications/{{id}}/documents/{{documentID}}/download
 Authorization: Bearer {{bankToken}}
 
+
+### Удалить PDF: только DRAFT; затем перечитать currentApp и financials
+# Не выполнять на заявке, которую уже отправили. Для проверки создайте отдельный черновик.
+DELETE {{base}}/applications/{{id}}/documents/{{documentID}}
+Authorization: Bearer {{clientToken}}
 
 ### DS напрямую: базовый ScoringResponse
 POST {{ds}}/scoring/evaluate

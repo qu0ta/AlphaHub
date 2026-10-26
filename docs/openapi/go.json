@@ -254,6 +254,48 @@
         },
         "x-required-role": "CLIENT",
         "description": "See docs/API_CONTRACTS.md for application rules."
+      },
+      "patch": {
+        "operationId": "patch_company_me",
+        "summary": "Update representative position",
+        "tags": [
+          "Company"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated linked company",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/company.Response"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-required-role": "CLIENT",
+        "description": "CLIENT only. Updates the current user position and returns their linked company. Empty/omitted representative_position clears it. Returns 404 if no linked company.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/company.PositionRequest"
+              },
+              "example": {
+                "representative_position": "Генеральный директор"
+              }
+            }
+          }
+        }
       }
     },
     "/company/by-inn/{inn}": {
@@ -619,7 +661,7 @@
           }
         },
         "x-required-role": "CLIENT",
-        "description": "Identical committed response is idempotent. DECLINE => OFFER_DECLINED; no automatic improved offer.",
+        "description": "Identical committed response is idempotent. DECLINE => OFFER_DECLINED; no automatic improved offer. For DECLINE, optional decline_reason is RATE/AMOUNT/TERM/OTHER and decline_comment is at most 2000 characters. For ACCEPT both must be empty or omitted.",
         "parameters": [
           {
             "name": "id",
@@ -1604,6 +1646,50 @@
           }
         ]
       }
+    },
+    "/applications/{id}/documents/{documentID}": {
+      "delete": {
+        "operationId": "delete_applications_id_documents_documentID",
+        "summary": "Delete a draft PDF and its extracted financial records",
+        "tags": [
+          "Applications"
+        ],
+        "description": "CLIENT owner only; application must be DRAFT. Deletes document metadata and financial records sourced from this document; increments application data_version. Re-read application/financials and confirm again after uploading a replacement. Physical file cleanup runs after commit; storage failures are logged without rolling back the committed deletion. 204 has no response body; non-draft => 409, missing/not-owned application or document => 404. After deleting the only financial document, GET financials returns 404 until new financial data is saved.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-role": "CLIENT",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "documentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted; no response body"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2043,6 +2129,22 @@
             "type": "string",
             "nullable": true,
             "format": "uuid"
+          },
+          "decline_reason": {
+            "type": "string",
+            "enum": [
+              "RATE",
+              "AMOUNT",
+              "TERM",
+              "OTHER"
+            ],
+            "description": "Optional decline reason; omitted/empty means unspecified. Use only for DECLINE.",
+            "nullable": true
+          },
+          "decline_comment": {
+            "type": "string",
+            "maxLength": 2000,
+            "nullable": true
           }
         },
         "required": [
@@ -2061,7 +2163,9 @@
           "created_at",
           "valid_until",
           "responded_at",
-          "responded_by_user_id"
+          "responded_by_user_id",
+          "decline_reason",
+          "decline_comment"
         ]
       },
       "application.OfferResponseRequest": {
@@ -2079,6 +2183,22 @@
               "ACCEPT",
               "DECLINE"
             ]
+          },
+          "decline_reason": {
+            "type": "string",
+            "enum": [
+              "",
+              "RATE",
+              "AMOUNT",
+              "TERM",
+              "OTHER"
+            ],
+            "description": "Optional decline reason; omitted/empty means unspecified. Use only for DECLINE."
+          },
+          "decline_comment": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Optional client comment; trimmed. ACCEPT requires decline fields to be empty/omitted."
           }
         },
         "required": [
@@ -2236,6 +2356,11 @@
           },
           "main_okved": {
             "type": "string"
+          },
+          "representative_position": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Representative position for the current user (users.company_position). Whitespace is trimmed; empty string clears the value."
           }
         },
         "required": [
@@ -2267,6 +2392,10 @@
           },
           "main_okved": {
             "type": "string"
+          },
+          "representative_position": {
+            "type": "string",
+            "description": "Included for the linked company when set. Omitted from registry lookup by INN."
           }
         },
         "required": [
@@ -3015,6 +3144,22 @@
           "valid_until": {
             "type": "string",
             "format": "date-time"
+          },
+          "decline_reason": {
+            "type": "string",
+            "enum": [
+              "RATE",
+              "AMOUNT",
+              "TERM",
+              "OTHER"
+            ],
+            "description": "Optional decline reason; omitted/empty means unspecified. Use only for DECLINE.",
+            "nullable": true
+          },
+          "decline_comment": {
+            "type": "string",
+            "maxLength": 2000,
+            "nullable": true
           }
         },
         "required": [
@@ -3317,6 +3462,17 @@
             "default": "FINANCIAL_STATEMENT"
           }
         }
+      },
+      "company.PositionRequest": {
+        "type": "object",
+        "properties": {
+          "representative_position": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Representative position for the current user (users.company_position). Whitespace is trimmed; empty string clears the value."
+          }
+        },
+        "description": "An empty or omitted position clears the value. JSON body is required."
       }
     },
     "responses": {

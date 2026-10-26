@@ -1,6 +1,6 @@
 # Модель данных PostgreSQL
 
-Источник — `backend/migrations/000001..000019`. Схема показывает таблицы предметной области; служебная `schema_migrations(version, dirty)` управляется golang-migrate.
+Источник — `backend/migrations/000001..000020`. Схема показывает таблицы предметной области; служебная `schema_migrations(version, dirty)` управляется golang-migrate.
 
 ```mermaid
 erDiagram
@@ -151,6 +151,8 @@ erDiagram
   timestamptz created_at
   timestamptz valid_until
   timestamptz responded_at
+  varchar decline_reason "nullable RATE AMOUNT TERM OTHER"
+  text decline_comment "nullable max 2000 characters"
  }
  info_requests {
   uuid id PK
@@ -187,4 +189,6 @@ erDiagram
 Основные ограничения: INN 10/12 цифр; суммы неотрицательные/положительные по смыслу; срок положительный; балл 0..100; финансовый месяц — первое число. Финансовая строка уникальна по `(application_id,data_version,period_month)`.
 Составные FK связывают `(source_document_id,application_id)` с документом именно этой заявки и `(scoring_id,application_id,data_version)` с соответствующим скорингом. Accepted offer ссылается на offers; принадлежность оффера заявке дополнительно проверяет Go в транзакции.
 
-Миграция 14 допускает незаполненный DRAFT, 16 добавляет долг, 17 — демо-компании/продукт, 18 — requires_collateral, сохранённую ставку заявки и equipment_loan, 19 — демо-аккаунты. `company_invitations` существует в БД, но маршруты приглашений не подключены в текущем main.go.
+Миграция 14 допускает незаполненный DRAFT, 16 добавляет долг, 17 — демо-компании/продукт, 18 — requires_collateral, сохранённую ставку заявки и equipment_loan, 19 — демо-аккаунты, 20 — причина и комментарий отказа клиента в offers. `company_invitations` существует в БД, но маршруты приглашений не подключены в текущем main.go.
+
+`users.company_position` хранит должность представителя; API принимает её как representative_position при создании/привязке компании и через PATCH /company/me. Данные относятся к пользователю, а не к записи реестра companies. Удаление PDF разрешено владельцу DRAFT, удаляет связанные financial_records и увеличивает data_version заявки.
