@@ -1,36 +1,75 @@
-# Комплект для технической и продуктовой проверки
+# AlphaHub — материалы для проверки
 
-Репозиторий: https://github.com/qu0ta/AlphaHub. Версия материалов: **submission-2026-10-26** (Git tag; итоговый SHA: `git rev-parse "submission-2026-10-26^{commit}"`). Коммиты после дедлайна не входят в оцениваемую версию: в форме сдачи укажите этот тег и его SHA. Дату и время дедлайна определяют организаторы.
+Мы сделали кредитный кабинет для малого бизнеса. Клиент загружает финансовую сводку в PDF,
+проверяет извлечённые показатели и подаёт заявку. Банк получает документы, объяснение скоринга
+и историю действий в одной карточке.
 
-Для приватного репозитория приглашение аккаунту жюри `alfa-hack-2026` отправлено владельцем. Принятие приглашения требуется проверить в GitHub Manage access; отправленное приглашение ещё не означает подтверждённый доступ.
+Код проекта: [qu0ta/AlphaHub](https://github.com/qu0ta/AlphaHub).
+Описание решения и команды — в [README](README.md).
 
-| Требование | Материал |
-|---|---|
-| Код и история | GitHub, тег версии выше |
-| Единый Docker-запуск | compose.yaml и Dockerfile в backend/, frontend/, ds/ |
-| Фиксация языка и библиотек | Dockerfile, backend/go.mod и go.sum, frontend/package-lock.json, ds/requirements.txt; отдельные исследовательские зависимости ds/experiments/requirements.txt |
-| Назначение, окружение, конфигурация, запуск, компоненты и сценарий | README.md и .env.example |
-| Синтетические данные и аккаунты | Миграции 17–19, ds/demo_pdfs/, ds/fixtures/, docs/DEMO_DATA.md |
-| Сторонние компоненты, модели, датасеты, моделируемые интеграции | THIRD_PARTY_NOTICES.md и docs/licenses/ |
-| Архитектура | docs/ARCHITECTURE.md |
-| Описание API | docs/API_CONTRACTS.md, docs/frontend/, docs/ds/CONTRACT.md |
-| OpenAPI/Swagger | docs/openapi/go.json (36 операций), DS /docs и /openapi.json, docs/ds/openapi.json |
-| Коллекция запросов | docs/requests/alphahub.http (все 36 операций Go и две DS) |
-| Состояния заявки | docs/APPLICATION_STATES.md |
-| Модель данных | docs/DATA_MODEL.md, миграции 1–20 |
-| Тестовые сценарии | docs/TEST_SCENARIOS.md, scripts/smoke_demo.py; результаты docs/DELIVERY_CHECK.md |
-| Аналитика и сравнение формулы/ML | docs/ds/SCORING_BENCHMARK.md, SCORING_BENCHMARK_RESULTS.md и ds/experiments/README.md |
+## Запуск
 
-## Самостоятельная проверка
+Нужны Git, Docker с Linux containers и Docker Compose v2. На Windows используется WSL2.
 
-1. Установить Docker Desktop/Engine с Linux containers и Compose v2, клонировать репозиторий и выбрать тег версии.
-2. Из корня выполнить `docker compose up --build -d`, дождаться healthy; migrate должен завершиться с кодом 0.
-3. Открыть http://localhost:5173. Демо-аккаунты: client@demo.ru, medium@demo.ru, risky@demo.ru, bank@demo.ru. Пароль всех аккаунтов: AlphaHubTest2026!.
-4. Пройти README и docs/TEST_SCENARIOS.md либо выполнить `python scripts/smoke_demo.py --base-url http://localhost:5173` в тестовом экземпляре: скрипт создаёт демо-заявки.
-5. Для просмотра DS API открыть http://localhost:8001/docs. Go OpenAPI импортировать из docs/openapi/go.json. Запросы .http выполнять по одному; альтернативные решения взаимоисключающие.
+```bash
+git clone https://github.com/qu0ta/AlphaHub.git
+cd AlphaHub
+docker compose up --build -d
+docker compose ps -a
+```
 
-Демо-PDF относятся к апрелю–сентябрю 2026 и подходят для первой подачи в октябре 2026; для другого периода см. docs/DEMO_DATA.md. OCR/Docling не включён: используйте стандартные stable.pdf, medium.pdf и risky.pdf с соответствующими компаниями.
+После запуска `migrate` должен завершиться с кодом `0`, остальные сервисы — перейти в `healthy`.
+Кабинет доступен по адресу [localhost:5173](http://localhost:5173),
+Swagger DS — [localhost:8001/docs](http://localhost:8001/docs).
+Настройки портов находятся в [.env.example](.env.example). Для стандартного запуска `.env` не нужен.
 
-## Границы поставки
+## Что показать
 
-Базовый Docker запускает формульный financial_rules_v2. ML-эксперименты и искусственные метки вынесены в отдельное исследовательское окружение, не выдают реальную банковскую вероятность дефолта. ЕГРЮЛ/ФНС/БКИ моделируются локально. Серверные подпись/выдача и улучшенный оффер после отклонения не реализованы; в диаграммах эти этапы обозначены отдельно. Публикация в облаке — желательная, но не обязательная часть предоставленного списка; публичный стенд здесь не заявлен.
+Пароль всех демо-аккаунтов: `AlphaHubTest2026!`.
+
+| Аккаунт | PDF | Условия | Ожидаемый результат |
+| --- | --- | --- | --- |
+| `client@demo.ru` | [stable.pdf](ds/demo_pdfs/stable.pdf) | Оборотный кредит, 2 млн ₽ на 12 месяцев, 19,9% | 83 балла, предложение |
+| `medium@demo.ru` | [medium.pdf](ds/demo_pdfs/medium.pdf) | Оборотный кредит, 1 млн ₽ на 18 месяцев, 19,9% | 57 баллов, ручное рассмотрение |
+| `risky@demo.ru` | [risky.pdf](ds/demo_pdfs/risky.pdf) | Оборотный кредит, 5 млн ₽ на 12 месяцев, 19,9% | 16 баллов, отказ |
+| `client@demo.ru` | [equipment.pdf](ds/demo_pdfs/equipment.pdf) | Кредит на оборудование, 2 млн ₽ на 24 месяца, 18% | 91 балл, предложение |
+
+1. Начните со stable.pdf: создайте заявку, подтвердите финансовые данные, отправьте её и примите предложение.
+2. Создайте заявку с medium.pdf. В отдельном сеансе войдите как `bank@demo.ru` и возьмите её в работу.
+3. В карточке банка откройте PDF, посмотрите факторы скоринга и историю. Запросите пояснения или предложите другие условия.
+4. На отдельных заявках проверьте автоматический отказ с risky.pdf и второй продукт с equipment.pdf.
+
+Данные синтетические. PDF содержат апрель–сентябрь 2026 года и рассчитаны на первую подачу в октябре 2026 года.
+Для другой даты нужен соответствующий отчётный период. Баллы выше приведены для указанных условий кредита.
+
+## Документы
+
+| Материал | Где находится |
+| --- | --- |
+| Описание проекта, технологии и запуск | [README.md](README.md) |
+| Архитектура | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Состояния заявки | [docs/APPLICATION_STATES.md](docs/APPLICATION_STATES.md) |
+| Модель данных | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) |
+| API-контракты | [docs/API_CONTRACTS.md](docs/API_CONTRACTS.md) |
+| Go OpenAPI | [docs/openapi/go.json](docs/openapi/go.json) |
+| Контракт и OpenAPI DS | [CONTRACT.md](docs/ds/CONTRACT.md), [openapi.json](docs/ds/openapi.json) |
+| Готовые HTTP-запросы | [docs/requests/alphahub.http](docs/requests/alphahub.http) |
+| Демо-данные | [docs/DEMO_DATA.md](docs/DEMO_DATA.md) |
+| Сценарии проверки | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
+| Методика сравнения Rules и ML | [docs/ds/SCORING_BENCHMARK.md](docs/ds/SCORING_BENCHMARK.md) |
+| Сторонние компоненты и лицензии | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
+
+Команды тестов приведены в README. Сквозной сценарий запускается командой
+`python scripts/smoke_demo.py --base-url http://localhost:5173` и создаёт новые заявки — для него нужна отдельная демо-база.
+
+## Что входит в MVP
+
+В приложении работает формульный скоринг `financial_rules_v2`. Мы отдельно сравнили правила и Logistic Regression
+на синтетических данных; обученная модель не участвует в решениях кабинета. Балл скоринга не означает вероятность дефолта.
+
+Стандартный запуск рассчитан на текстовые PDF. OCR и Docling в него не входят.
+ЕГРЮЛ, ФНС и БКИ не подключены: реестр компаний локальный, внешние проверки демонстрационные.
+Серверный процесс заканчивается принятием или отклонением предложения; дальнейшие подписание и выдача в интерфейсе симулируются.
+
+Для сдачи нужно указать SHA выбранного коммита (`git rev-parse HEAD`) и проверить доступ аккаунта жюри
+`alfa-hack-2026` к приватному репозиторию. Новую версию этих материалов пока не публиковали.
